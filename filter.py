@@ -2,7 +2,7 @@ import cv2
 import os
 import math
 import argparse
-
+import numpy as np
 
 imageDir = 'sampleImage'
 # Here we use millimeter
@@ -47,7 +47,6 @@ def colorCalculation():
     # So we use bounding distance to obtain corresponding colour range
     upperColor = int(255.0 * upperDistance/maxDepthRange)
     lowerColor = int(255.0 * lowerDistance/maxDepthRange)
-    print upperDistance, lowerDistance
 
 def imageProcess():
     # Read image from ImageTest folder
@@ -55,6 +54,7 @@ def imageProcess():
     rawImage = cv2.imread(imagePath)
     # Prevent directly modifying original image
     image = cv2.cvtColor(rawImage, cv2.COLOR_BGR2GRAY)
+    dummyImage = image.copy()
 
     frontI = 0
     frontJ = 0
@@ -74,7 +74,6 @@ def imageProcess():
             tempArray.append((frontI, frontJ))
         if (backI != 0 and backJ != 0):
             tempArray.append((backI, backJ))
-        print tempArray
         for j in range (image.shape[1]): # traverses through width of the image
             # Since fence is always higher than kinect camera, we just take the upper depth map
             if (i >= image.shape[0]/2):
@@ -107,26 +106,50 @@ def imageProcess():
                 cv2.line(image, (backJ, backI), (tempArray[1][1], tempArray[1][0]), (255, 255, 255), lineThickness)
                 changedBack = False
 
-    # detect circles in the image
-    circles = cv2.HoughCircles(image, cv2.HOUGH_GRADIENT, 1.2, 100)
-    
-    # ensure at least some circles were found
-    if circles is not None:
-        # convert the (x, y) coordinates and radius of the circles to integers
-        circles = np.round(circles[0, :]).astype("int")
-    
-        # loop over the (x, y) coordinates and radius of the circles
-        for (x, y, r) in circles:
-            # draw the circle in the output image, then draw a rectangle
-            # corresponding to the center of the circle
-            cv2.circle(output, (x, y), r, (0, 255, 0), 4)
-            cv2.rectangle(output, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
-    
-        # show the output image
-        cv2.imshow("output", np.hstack([image, output]))
-        cv2.waitKey(0)
+    # Min-X, Max-X, Min-Y, Max-Y
+    boundingBox = [dummyImage.shape[1], 0, dummyImage.shape[0], 0]
+    # Sum and count of white points
+    pointSum = [0, 0]
+    pointCount = 0
+    # traverses through height of the image
+    for i in range (dummyImage.shape[0]):
+        # traverses through width of the image
+        for j in range (dummyImage.shape[1]):
+            # Since fence is always higher than kinect camera, we just take the upper depth map
+            if (i >= dummyImage.shape[0]/2):
+                dummyImage[i][j] = 0
+            elif (dummyImage[i][j] <= lowerColor):
+                dummyImage[i][j] = 0
+            elif (dummyImage[i][j] >= upperColor):
+                dummyImage[i][j] = 0
+            else:
+                dummyImage[i][j] = 255
+                pointSum[0] += j
+                pointSum[1] += i
+                pointCount += 1
+                if (boundingBox[0] > j):
+                    boundingBox[0] = j
+                if (boundingBox[1] < j):
+                    boundingBox[1] = j
+                if (boundingBox[2] > i):
+                    boundingBox[2] = i
+                if (boundingBox[3] < i):
+                    boundingBox[3] = i
 
-    cv2.imshow('image', image)
+    pointSum[0] = int(pointSum[0]/pointCount)
+    pointSum[1] = int(pointSum[1]/pointCount)
+    largestY = 0
+    # traverses through height of the image
+    for i in range (dummyImage.shape[0]):
+        for j in range (pointSum[0]-10, pointSum[0]+10):
+            if (dummyImage[i][j] == 255 and i > largestY):
+                largestY = i
+    boundingRadius = largestY - pointSum[1]
+
+    # Draw bounding circle
+    cv2.circle(dummyImage,(pointSum[0], pointSum[1]), boundingRadius, (255, 255, 255), thickness=2, lineType=8, shift=0)
+
+    cv2.imshow('image',dummyImage)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
