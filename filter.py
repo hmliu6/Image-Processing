@@ -56,56 +56,6 @@ def imageProcess():
     image = cv2.cvtColor(rawImage, cv2.COLOR_BGR2GRAY)
     dummyImage = image.copy()
 
-    frontI = 0
-    frontJ = 0
-    backI = 0
-    backJ = 0
-    lineThickness = 2
-    tempArray = []
-    firstWhite = False
-    changedFront = False
-    changedBack = False
-    # cv2.line(image, (frontJ, frontI), (j, i), (255, 255, 255), lineThickness)
-    for i in range (image.shape[0]): # traverses through height of the image
-        if(tempArray):
-            tempArray.remove(tempArray[0])
-            tempArray.remove(tempArray[0])
-        if (frontI != 0 and frontJ != 0):
-            tempArray.append((frontI, frontJ))
-        if (backI != 0 and backJ != 0):
-            tempArray.append((backI, backJ))
-        for j in range (image.shape[1]): # traverses through width of the image
-            # Since fence is always higher than kinect camera, we just take the upper depth map
-            if (i >= image.shape[0]/2):
-                image[i][j] = 0
-            elif (image[i][j] <= lowerColor):
-                image[i][j] = 0
-            elif (image[i][j] >= upperColor):
-                image[i][j] = 0
-            else:
-                image[i][j] = 255
-                if (firstWhite == False):
-                    frontI = i
-                    frontJ = j
-                    backI = i
-                    backJ = j
-                elif (firstWhite == True and j < frontJ):
-                    changedFront = True
-                    frontI = i
-                    frontJ = j
-                elif (firstWhite == True and j > backJ):
-                    changedBack = True
-                    backI = i
-                    backJ = j
-                firstWhite = True
-        if(tempArray):
-            if (changedFront == True):
-                cv2.line(image, (frontJ, frontI), (tempArray[0][1], tempArray[0][0]), (255, 255, 255), lineThickness)
-                changedFront = False
-            elif (changedBack == True):
-                cv2.line(image, (backJ, backI), (tempArray[1][1], tempArray[1][0]), (255, 255, 255), lineThickness)
-                changedBack = False
-
     # Min-X, Max-X, Min-Y, Max-Y
     boundingBox = [dummyImage.shape[1], 0, dummyImage.shape[0], 0]
     # Sum and count of white points
@@ -138,18 +88,20 @@ def imageProcess():
 
     pointSum[0] = int(pointSum[0]/pointCount)
     pointSum[1] = int(pointSum[1]/pointCount)
-    largestY = 0
+    smallestY = dummyImage.shape[0]
     # traverses through height of the image
-    for i in range (dummyImage.shape[0]):
+    for i in range (pointSum[1], 0, -1):
         for j in range (pointSum[0]-10, pointSum[0]+10):
-            if (dummyImage[i][j] == 255 and i > largestY):
-                largestY = i
-    boundingRadius = largestY - pointSum[1]
+            if (dummyImage[i][j] == 255 and i < smallestY):
+                smallestY = i
+    boundingRadius = pointSum[1] - smallestY
+    print boundingRadius
+    print pointSum[0], pointSum[1]
 
     # Draw bounding circle
-    cv2.circle(dummyImage,(pointSum[0], pointSum[1]), boundingRadius, (255, 255, 255), thickness=2, lineType=8, shift=0)
+    cv2.circle(image,(pointSum[0], pointSum[1]), boundingRadius, (255, 255, 255), thickness=2, lineType=8, shift=0)
 
-    cv2.imshow('image',dummyImage)
+    cv2.imshow("output", image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
