@@ -59,8 +59,32 @@ char* pathParser(const char *fileDir){
     return parsedPath;
 }
 
-void boundingArea(Mat rawImage, Mat image, int **whitePoints){
+void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount){
+    int pointAvg[2]= {0, 0}, smallestY = image.cols/2;
+    for(int i=0; i<pointCount; i++){
+        pointAvg[0] += whitePoints[0][i];
+        pointAvg[1] += whitePoints[1][i];
+    }
+    // Centre of bounding circle (x, y)
+    pointAvg[0] = pointAvg[0] / pointCount;
+    pointAvg[1] = pointAvg[1] / pointCount;
+    Point centre;
+    centre.y = pointAvg[0]; centre.x = pointAvg[1];
+
+    cout << "{ " << pointAvg[0] << ", " << pointAvg[1] << " }" << endl;
     
+    for(int i=0; i<pointCount; i++){
+        if(whitePoints[0][i] < pointAvg[0] + 5 && whitePoints[0][i] > pointAvg[0] - 5){
+            if(whitePoints[1][i] < smallestY)
+                smallestY = i;
+        }
+    }
+
+    int boundingRadius = pointAvg[1] - smallestY;
+    cout << boundingRadius << endl;
+
+    circle(image, centre, 30, CV_RGB(255, 255, 255), 2);
+
 }
 
 void preFiltering(char *filePath, int upperColorRange, int lowerColorRange){
@@ -71,14 +95,18 @@ void preFiltering(char *filePath, int upperColorRange, int lowerColorRange){
 		cout << "Cannot find document!!!" << endl;
 	else{
         int *whitePoints[2], pointCount = 0;
-        whitePoints[0] = (int *)malloc(1000 * sizeof(int));
-        whitePoints[1] = (int *)malloc(1000 * sizeof(int));
+        whitePoints[0] = (int *)malloc(10000 * sizeof(int));
+        whitePoints[1] = (int *)malloc(10000 * sizeof(int));
         // After opening files, convert to greyscale and pass to processing function
 		cvtColor(rawImage, image, COLOR_BGR2GRAY);
         // Filter out unrelated pixels
         for(int j=0; j<image.cols; j++){
             for(int i=0; i<image.rows; i++){
                 if(i >= image.cols/2)
+                    image.at<uchar>(i, j) = 0;
+                else if(j <= image.rows/5)
+                    image.at<uchar>(i, j) = 0;
+                else if(j >= image.rows* 4/5)
                     image.at<uchar>(i, j) = 0;
                 else if(image.at<uchar>(i, j) <= lowerColorRange)
                     image.at<uchar>(i, j) = 0;
@@ -94,7 +122,9 @@ void preFiltering(char *filePath, int upperColorRange, int lowerColorRange){
         }
         // for(int i=0; i<pointCount; i++)
         //     cout << "{ " << whitePoints[0][i] << ", " << whitePoints[1][i] << " }" << endl;
-        boundingArea(rawImage, image, whitePoints);
+        if(pointCount > 0)
+            drawBoundingArea(rawImage, image, whitePoints, pointCount);
+        
 		imshow("Test", image);
 		cvWaitKey(0);
 	}
