@@ -79,11 +79,40 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
                 smallestY = i;
         }
     }
+    int boundingRadius = pointAvg[0] - smallestY;
 
-    int boundingRadius = pointAvg[1] - smallestY;
-    cout << boundingRadius << endl;
+    int listOfHeight, countList = 0;
+    for(int i=0; i<boundingRadius; i++){
+        int count = 0;
+        for(int j=0; j<pointCount; j++){
+            int dY = pow((whitePoints[0][j] - (pointAvg[0] - i)), 2);
+            int dX = pow((whitePoints[1][j] - pointAvg[1]), 2);
+            if(dX + dY < pow(20, 2))
+                count += 1;
+        }
+        if(count <= 10){
+            listOfHeight += (pointAvg[0] - i);
+            countList += 1;
+        }
+    }
 
-    circle(image, centre, 30, CV_RGB(255, 255, 255), 2);
+    centre.y = listOfHeight/countList;
+    int largestRadius = 0;
+    for(int i=0; i<boundingRadius; i++){
+        int count = 0;
+        for(int j=0; j<pointCount; j++){
+            int dY = pow((whitePoints[0][j] - centre.y), 2);
+            int dX = pow((whitePoints[1][j] - centre.x), 2);
+            if(dX + dY < pow(i, 2))
+                count += 1;
+        }
+        if(count <= 10 && i > largestRadius){
+            largestRadius = i;
+        }
+    }
+    cout << largestRadius << endl;
+
+    circle(image, centre, largestRadius, CV_RGB(255, 255, 255), 2);
 
 }
 
