@@ -82,6 +82,7 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
     int boundingRadius = pointAvg[0] - smallestY;
 
     int listOfHeight, countList = 0;
+    bool blackZone = false;
     for(int i=0; i<boundingRadius; i++){
         int count = 0;
         for(int j=0; j<pointCount; j++){
@@ -90,11 +91,17 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
             if(dX + dY < pow(20, 2))
                 count += 1;
         }
-        if(count <= 10){
+        if(countList > 10)
+            blackZone = true;
+        if(count >= 20 && blackZone)
+            break;
+        else if(count <= 10){
             listOfHeight += (pointAvg[0] - i);
             countList += 1;
         }
     }
+
+    cout << countList << endl;
 
     centre.y = listOfHeight/countList;
     int largestRadius = 0;
@@ -112,7 +119,7 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
     }
     cout << largestRadius << endl;
 
-    circle(image, centre, largestRadius, CV_RGB(255, 255, 255), 2);
+    circle(rawImage, centre, largestRadius, CV_RGB(255, 255, 255), 2);
 
 }
 
@@ -154,7 +161,7 @@ void preFiltering(char *filePath, int upperColorRange, int lowerColorRange){
         if(pointCount > 0)
             drawBoundingArea(rawImage, image, whitePoints, pointCount);
         
-		imshow("Test", image);
+		imshow("Test", rawImage);
 		cvWaitKey(0);
 	}
 }
