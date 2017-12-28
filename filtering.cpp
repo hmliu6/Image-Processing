@@ -66,10 +66,15 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
         pointAvg[1] += whitePoints[1][i];
     }
     // Centre of bounding circle (x, y)
-    pointAvg[0] = pointAvg[0] / pointCount;
-    pointAvg[1] = pointAvg[1] / pointCount;
     Point centre;
-    centre.y = pointAvg[0]; centre.x = pointAvg[1];
+    if(pointCount > 0){
+        pointAvg[0] = pointAvg[0] / pointCount;
+        pointAvg[1] = pointAvg[1] / pointCount;
+        centre.y = pointAvg[0]; centre.x = pointAvg[1];
+    }
+    else{
+        centre.x = 0; centre.y = 0;
+    }
 
     cout << "{ " << pointAvg[0] << ", " << pointAvg[1] << " }" << endl;
     
@@ -103,7 +108,8 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
 
     cout << countList << endl;
 
-    centre.y = listOfHeight/countList;
+    if(countList > 0)
+        centre.y = listOfHeight/countList;
     int largestRadius = 0;
     for(int i=0; i<boundingRadius; i++){
         int count = 0;
