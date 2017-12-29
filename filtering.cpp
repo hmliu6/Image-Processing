@@ -17,20 +17,15 @@ const char* imageDir = "sampleImage";
 // Here we use millimeter
 const int fenceHeight = 2500;
 const int kinectHeight = 1800;
-const int fenceToKinect = 4000;
-const int tolerance = 300;
+const int fenceToKinect = 3000;
+const int tolerance = 200;
 const int maxDepthRange = 8000;
 const int imageNumber = 1;
 
-void colorCalculation(int *upperColor, int *lowerColor){
+void colorCalculation(int *lowerColor){
     // Pythagoras's theorem, a^2 + b^2 = c^2
     double centreToKinect = sqrt(pow(fenceHeight - kinectHeight, 2) + pow(fenceToKinect, 2));
-    // Get the bounding distance which fence lied within
-    double upperDistance = centreToKinect + tolerance;
     double lowerDistance = centreToKinect - tolerance;
-    // Since we get depth image by dividing 0-255 into number of depthRange pieces
-    // So we use bounding distance to obtain corresponding colour range
-    *upperColor = int(255.0 * upperDistance/maxDepthRange);
     *lowerColor = int(255.0 * lowerDistance/maxDepthRange);
 }
 
@@ -60,39 +55,59 @@ char* pathParser(const char *fileDir){
 }
 
 void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount){
-    int pointAvg[2]= {0, 0}, smallestY = image.cols/2;
-    for(int i=0; i<pointCount; i++){
-        pointAvg[0] += whitePoints[0][i];
-        pointAvg[1] += whitePoints[1][i];
-    }
     // Centre of bounding circle (x, y)
     Point centre;
-    if(pointCount > 0){
-        pointAvg[0] = pointAvg[0] / pointCount;
-        pointAvg[1] = pointAvg[1] / pointCount;
-        centre.y = pointAvg[0]; centre.x = pointAvg[1];
-    }
-    else{
-        centre.x = 0; centre.y = 0;
-    }
+    centre.x = 0; centre.y = 0;
+    int *rowWhiteNumber = (int *)malloc(image.rows * sizeof(int));
+    int rowWhiteCount = 0;
+    for(int i=0; i<10; i++)
+        rowWhiteNumber[i] = -1;
 
-    cout << "{ " << pointAvg[0] << ", " << pointAvg[1] << " }" << endl;
-    
+    int currentX = 0, consecutiveCount = 0, lastHeight = 0;
+    bool chosen = false, garbage = false;
     for(int i=0; i<pointCount; i++){
-        if(whitePoints[0][i] < pointAvg[0] + 5 && whitePoints[0][i] > pointAvg[0] - 5){
-            if(whitePoints[1][i] < smallestY)
-                smallestY = i;
+        // cout << "{" << whitePoints[1][i] << ", " << whitePoints[0][i] << "}" << endl;
+        if(whitePoints[0][i] < image.rows/2){
+            currentX = 0;
+            continue;
+        }
+        if(currentX != whitePoints[1][i]){
+            currentX = whitePoints[1][i];
+            lastHeight = whitePoints[0][i];
+            chosen = false;
+            garbage = false;
+        }
+        else{
+            if(whitePoints[0][i] - lastHeight == 1 && !garbage){
+                consecutiveCount += 1;
+                lastHeight = whitePoints[0][i];
+            }
+            else
+                garbage = true;
+            if(consecutiveCount >= 20 && !chosen){
+                rowWhiteNumber[rowWhiteCount] = currentX;
+                rowWhiteCount += 1;
+                chosen = true;
+            }
         }
     }
-    int boundingRadius = pointAvg[0] - smallestY;
 
-    int listOfHeight, countList = 0;
+    if(rowWhiteCount > 0){
+        for(int i=0; i<rowWhiteCount; i++){
+            centre.x += rowWhiteNumber[i];
+            // cout << rowWhiteNumber[i] << endl;
+        }
+        centre.x = int(centre.x / rowWhiteCount);
+    }
+    cout << centre.x << endl;
+
+    int listOfHeight = 0, countList = 0;
     bool blackZone = false;
-    for(int i=0; i<boundingRadius; i++){
+    for(int i=image.cols/2; i>=0; i--){
         int count = 0;
         for(int j=0; j<pointCount; j++){
-            int dY = pow((whitePoints[0][j] - (pointAvg[0] - i)), 2);
-            int dX = pow((whitePoints[1][j] - pointAvg[1]), 2);
+            int dY = pow((whitePoints[0][j] - i), 2);
+            int dX = pow((whitePoints[1][j] - centre.x), 2);
             if(dX + dY < pow(20, 2))
                 count += 1;
         }
@@ -101,17 +116,14 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
         if(count >= 20 && blackZone)
             break;
         else if(count <= 10){
-            listOfHeight += (pointAvg[0] - i);
+            listOfHeight += i;
             countList += 1;
         }
     }
-
-    cout << countList << endl;
-
     if(countList > 0)
-        centre.y = listOfHeight/countList;
+        centre.y = int(listOfHeight / countList);
     int largestRadius = 0;
-    for(int i=0; i<boundingRadius; i++){
+    for(int i=0; i<50; i++){
         int count = 0;
         for(int j=0; j<pointCount; j++){
             int dY = pow((whitePoints[0][j] - centre.y), 2);
@@ -119,17 +131,16 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
             if(dX + dY < pow(i, 2))
                 count += 1;
         }
-        if(count <= 10 && i > largestRadius){
+        if(count > 20)
+            break;
+        else if(count <= 10 && i > largestRadius){
             largestRadius = i;
         }
     }
-    cout << largestRadius << endl;
-
     circle(rawImage, centre, largestRadius, CV_RGB(255, 255, 255), 2);
-
 }
 
-void preFiltering(char *filePath, int upperColorRange, int lowerColorRange){
+void preFiltering(char *filePath, int lowerColorRange){
 	cv::Mat rawImage, image;
 	rawImage = imread(filePath, 1);
 
@@ -152,8 +163,6 @@ void preFiltering(char *filePath, int upperColorRange, int lowerColorRange){
                     image.at<uchar>(i, j) = 0;
                 else if(image.at<uchar>(i, j) <= lowerColorRange)
                     image.at<uchar>(i, j) = 0;
-                else if(image.at<uchar>(i, j) >= upperColorRange)
-                    image.at<uchar>(i, j) = 0;
                 else{
                     image.at<uchar>(i, j) = 255;
                     whitePoints[0][pointCount] = i;
@@ -162,8 +171,6 @@ void preFiltering(char *filePath, int upperColorRange, int lowerColorRange){
                 }
             }
         }
-        // for(int i=0; i<pointCount; i++)
-        //     cout << "{ " << whitePoints[0][i] << ", " << whitePoints[1][i] << " }" << endl;
         if(pointCount > 0)
             drawBoundingArea(rawImage, image, whitePoints, pointCount);
         
@@ -175,11 +182,10 @@ void preFiltering(char *filePath, int upperColorRange, int lowerColorRange){
 int main(int argc, char **argv){
     int upperColor, lowerColor;
     // Pass by reference
-    colorCalculation(&upperColor, &lowerColor);
+    colorCalculation(&lowerColor);
 
     char* filePath = pathParser(imageDir);
-    cout << filePath << endl;
-    preFiltering(filePath, upperColor, lowerColor);
+    preFiltering(filePath, lowerColor);
 
     return 0;
 }
