@@ -45,7 +45,7 @@ def colorCalculation():
     lowerDistance = centreToKinect - tolerance
     # Since we get depth image by dividing 0-255 into number of depthRange pieces
     # So we use bounding distance to obtain corresponding colour range
-    upperColor = int(255.0 * upperDistance/maxDepthRange)
+    upperColor = 255
     lowerColor = int(255.0 * lowerDistance/maxDepthRange)
 
 def imageProcess():
@@ -56,52 +56,80 @@ def imageProcess():
     image = cv2.cvtColor(rawImage, cv2.COLOR_BGR2GRAY)
     dummyImage = image.copy()
 
-    # Min-X, Max-X, Min-Y, Max-Y
-    boundingBox = [dummyImage.shape[1], 0, dummyImage.shape[0], 0]
-    # Sum and count of white points
-    pointSum = [0, 0]
-    pointCount = 0
     # traverses through height of the image
     for i in range (dummyImage.shape[0]):
         # traverses through width of the image
         for j in range (dummyImage.shape[1]):
             # Since fence is always higher than kinect camera, we just take the upper depth map
-            if (i >= dummyImage.shape[0]/2):
+            if (dummyImage[i][j] <= lowerColor):
                 dummyImage[i][j] = 0
-            elif (dummyImage[i][j] <= lowerColor):
-                dummyImage[i][j] = 0
-            elif (dummyImage[i][j] >= upperColor):
-                dummyImage[i][j] = 0
+
+    rodCentreX = 0
+    rodCount = 0
+    # traverses through width of the image
+    for j in range (dummyImage.shape[1]):
+        count = 0
+        # traverses height of first half of the image
+        for i in range (dummyImage.shape[0]/2, 0, -1):
+            if (dummyImage[i][j] > lowerColor):
+                count += 1
             else:
-                dummyImage[i][j] = 255
-                pointSum[0] += j
-                pointSum[1] += i
-                pointCount += 1
-                if (boundingBox[0] > j):
-                    boundingBox[0] = j
-                if (boundingBox[1] < j):
-                    boundingBox[1] = j
-                if (boundingBox[2] > i):
-                    boundingBox[2] = i
-                if (boundingBox[3] < i):
-                    boundingBox[3] = i
+                break
+        if (count > 20):
+            rodCentreX += j
+            rodCount += 1
 
-    pointSum[0] = int(pointSum[0]/pointCount)
-    pointSum[1] = int(pointSum[1]/pointCount)
-    smallestY = dummyImage.shape[0]
-    # traverses through height of the image
-    for i in range (pointSum[1], 0, -1):
-        for j in range (pointSum[0]-10, pointSum[0]+10):
-            if (dummyImage[i][j] == 255 and i < smallestY):
-                smallestY = i
-    boundingRadius = pointSum[1] - smallestY
-    print boundingRadius
-    print pointSum[0], pointSum[1]
+    if(rodCount > 0):
+        rodCentreX = rodCentreX / rodCount
 
-    # Draw bounding circle
-    cv2.circle(image,(pointSum[0], pointSum[1]), boundingRadius, (255, 255, 255), thickness=2, lineType=8, shift=0)
+    cv2.line(rawImage, (rodCentreX, dummyImage.shape[0]/2), (rodCentreX, 0), (0, 255, 0), 2)
 
-    cv2.imshow("output", image)
+    listOfHeight = 0
+    countList = 0
+    blackZone = False
+    circleY = 0
+    # Finding y-coordinate of inner circle centre with known x-coordinate
+    for i in range (dummyImage.shape[0]/2, 0, -1):
+        count = 0
+        for j, numpyArray in enumerate(dummyImage):
+            for k, element in enumerate(numpyArray):
+                if(dummyImage[i][j] > lowerColor):
+                    dX = math.pow(k - rodCentreX, 2)
+                    dY = math.pow(j - i, 2)
+                    if(dX + dY < math.pow(15, 2)):
+                        count += 1
+        if (countList > 15):
+            blackZone = True;
+        if (count >= 10 and blackZone):
+            break
+        elif(count <= 10):
+            listOfHeight += i
+            countList += 1
+    
+    if(countList > 0):
+        circleY = listOfHeight / countList
+
+    print circleY
+    
+    # Finding radius of inner circle with known centre
+    radius = 0
+    for i in range (1, 50):
+        count = 0
+        for j, numpyArray in enumerate(dummyImage):
+            for k, element in enumerate(numpyArray):
+                if(dummyImage[i][j] > lowerColor):
+                    dX = math.pow(k - rodCentreX, 2)
+                    dY = math.pow(j - circleY, 2)
+                    if(dX + dY > math.pow(i, 2)):
+                        count += 1
+        if (count > 10):
+            break
+        elif (count < 10 and radius < i):
+            radius = i
+
+    cv2.circle(rawImage, (rodCentreX, circleY), radius, (0, 0, 255), 2)
+
+    cv2.imshow("output", rawImage)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
