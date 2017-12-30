@@ -14,30 +14,31 @@ using namespace std;
 using namespace cv;
 
 const char* imageDir = "sampleImage";
+String filename = "resize-4500.mp4";
 // Here we use millimeter
 const int fenceHeight = 2500;
 const int kinectHeight = 1800;
-const int fenceToKinect = 4000;
-const int tolerance = 300;
-const int maxDepthRange = 4500;
+const int fenceToKinect = 3000;
+const int tolerance = 200;
+const int maxDepthRange = 8000;
 const int imageNumber = 1;
+const int rodLength = 35;
 
-void colorCalculation(int *upperColor, int *lowerColor){
+// Calculate minimum meaningful colour range
+void colorCalculation(int *lowerColor){
     // Pythagoras's theorem, a^2 + b^2 = c^2
     double centreToKinect = sqrt(pow(fenceHeight - kinectHeight, 2) + pow(fenceToKinect, 2));
-    // Get the bounding distance which fence lied within
-    double upperDistance = centreToKinect + tolerance;
     double lowerDistance = centreToKinect - tolerance;
-    // Since we get depth image by dividing 0-255 into number of depthRange pieces
-    // So we use bounding distance to obtain corresponding colour range
-    *upperColor = int(255.0 * upperDistance/maxDepthRange);
+    // Map from depth value to grayscale
     *lowerColor = int(255.0 * lowerDistance/maxDepthRange);
 }
 
+// Only for image inputs in defined paths
 char* pathParser(const char *fileDir){
     char *parsedPath;
     char buffer[10];
     int pathLength = 0;
+    // Here we define image path as "sampleImage/test1-4500.png"
     pathLength = strlen(fileDir) + 1 + strlen("test") + 6 + strlen(".png");
     parsedPath = (char *)malloc(sizeof(char) * (pathLength+1));
 
@@ -59,98 +60,137 @@ char* pathParser(const char *fileDir){
     return parsedPath;
 }
 
+// Draw function for finding inner circle
 void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount){
-    int pointAvg[2]= {0, 0}, smallestY = image.cols/2;
-    for(int i=0; i<pointCount; i++){
-        pointAvg[0] += whitePoints[0][i];
-        pointAvg[1] += whitePoints[1][i];
-    }
     // Centre of bounding circle (x, y)
     Point centre;
-    if(pointCount > 0){
-        pointAvg[0] = pointAvg[0] / pointCount;
-        pointAvg[1] = pointAvg[1] / pointCount;
-        centre.y = pointAvg[0]; centre.x = pointAvg[1];
-    }
-    else{
-        centre.x = 0; centre.y = 0;
-    }
+    centre.x = 0; centre.y = 0;
+    // Initialize array with all zero to store satisfied x-coordinates
+    int *rowWhiteNumber = (int *)malloc(image.rows * sizeof(int));
+    int rowWhiteCount = 0;
+    for(int i=0; i<10; i++)
+        rowWhiteNumber[i] = -1;
 
-    cout << "{ " << pointAvg[0] << ", " << pointAvg[1] << " }" << endl;
-    
+    int currentX = 0, consecutiveCount = 0, lastHeight = 0;
+    bool chosen = false, garbage = false;
+    // Finding x-coordinate of inner circle in set of white points
     for(int i=0; i<pointCount; i++){
-        if(whitePoints[0][i] < pointAvg[0] + 5 && whitePoints[0][i] > pointAvg[0] - 5){
-            if(whitePoints[1][i] < smallestY)
-                smallestY = i;
+        // cout << "{" << whitePoints[1][i] << ", " << whitePoints[0][i] << "}" << endl;
+        // All points are already sorted according to x-coordinate
+        if(whitePoints[0][i] < image.rows/2){
+            currentX = 0;
+            continue;
+        }
+        if(currentX != whitePoints[1][i]){
+            // Re-count if x-coordinate changed
+            currentX = whitePoints[1][i];
+            lastHeight = whitePoints[0][i];
+            consecutiveCount = 0;
+            chosen = false;
+            garbage = false;
+        }
+        else{
+            if(whitePoints[0][i] - lastHeight == 1 && !garbage){
+                // Keep counting if we detected consecutive white
+                consecutiveCount += 1;
+                lastHeight = whitePoints[0][i];
+            }
+            else
+                garbage = true;
+            // Large consecutive count means that it is probably part of rod
+            if(consecutiveCount >= rodLength && !chosen){
+                // Mark it and denoted as chosen to prevent re-adding
+                rowWhiteNumber[rowWhiteCount] = currentX;
+                rowWhiteCount += 1;
+                chosen = true;
+            }
         }
     }
-    int boundingRadius = pointAvg[0] - smallestY;
 
-    int listOfHeight, countList = 0;
+    if(rowWhiteCount > 0){
+        for(int i=0; i<rowWhiteCount; i++)
+            centre.x += rowWhiteNumber[i];
+        // Take sum of average to become x-coordinate of centre
+        centre.x = int(centre.x / rowWhiteCount);
+    }
+
+    int listOfHeight = 0, countList = 0;
     bool blackZone = false;
-    for(int i=0; i<boundingRadius; i++){
+    for(int i=image.cols/2; i>=0; i--){
         int count = 0;
         for(int j=0; j<pointCount; j++){
-            int dY = pow((whitePoints[0][j] - (pointAvg[0] - i)), 2);
-            int dX = pow((whitePoints[1][j] - pointAvg[1]), 2);
+            // Test every points if they are inside circle, Increase count
+            int dY = pow((whitePoints[0][j] - i), 2);
+            int dX = pow((whitePoints[1][j] - centre.x), 2);
+            // Circle that must have smaller radius than inner one
             if(dX + dY < pow(20, 2))
                 count += 1;
         }
+        // If we get enough amounts of count, it means that now it is looping in the black area
         if(countList > 10)
             blackZone = true;
+        // Once we get a circle with too many white points, then we stop looping
         if(count >= 20 && blackZone)
             break;
         else if(count <= 10){
-            listOfHeight += (pointAvg[0] - i);
+            listOfHeight += i;
             countList += 1;
         }
     }
-
-    cout << countList << endl;
-
+    // Take sum of average to get y-coordinate of centre
     if(countList > 0)
-        centre.y = listOfHeight/countList;
+        centre.y = int(listOfHeight / countList);
+    
+    // Test for the maximum acceptable radius
     int largestRadius = 0;
-    for(int i=0; i<boundingRadius; i++){
+    // 50 can be other values which is sufficiently large enough
+    for(int i=0; i<50; i++){
         int count = 0;
         for(int j=0; j<pointCount; j++){
+            // Test every points if they are inside circle, Increase count
             int dY = pow((whitePoints[0][j] - centre.y), 2);
             int dX = pow((whitePoints[1][j] - centre.x), 2);
             if(dX + dY < pow(i, 2))
                 count += 1;
         }
-        if(count <= 10 && i > largestRadius){
+        // Once we get a circle with too many white points, then we stop looping
+        if(count > 20)
+            break;
+        // Keep storing largest radius value
+        else if(count <= 10 && i > largestRadius){
             largestRadius = i;
         }
     }
-    cout << largestRadius << endl;
-
+    // Draw circle in raw image instead of processed image
     circle(rawImage, centre, largestRadius, CV_RGB(255, 255, 255), 2);
-
 }
 
-void preFiltering(Mat rawImage, int upperColorRange, int lowerColorRange){
+void preFiltering(Mat rawImage, int lowerColorRange){
     cv::Mat image;
     rawImage.copyTo(image);
     int *whitePoints[2], pointCount = 0;
+    // whitePoints[0] = set of y-coordinates
     whitePoints[0] = (int *)malloc(10000 * sizeof(int));
+    // whitePoints[1] = set of x-coordinates
     whitePoints[1] = (int *)malloc(10000 * sizeof(int));
     // After opening files, convert to greyscale and pass to processing function
     cvtColor(rawImage, image, COLOR_BGR2GRAY);
     // Filter out unrelated pixels
     for(int j=0; j<image.cols; j++){
         for(int i=0; i<image.rows; i++){
+            // Assume that the circle must be higher than image centre
             if(i >= image.cols/2)
                 image.at<uchar>(i, j) = 0;
-            else if(j <= image.rows/5)
+            // Trim out leftmost and rightmost 1/8 image to reduce noise
+            else if(j <= image.rows/8)
                 image.at<uchar>(i, j) = 0;
-            else if(j >= image.rows* 4/5)
+            else if(j >= image.rows* 7/8)
                 image.at<uchar>(i, j) = 0;
+            // Set all smaller than minimum colour value points to zero
             else if(image.at<uchar>(i, j) <= lowerColorRange)
                 image.at<uchar>(i, j) = 0;
-            else if(image.at<uchar>(i, j) >= upperColorRange)
-                image.at<uchar>(i, j) = 0;
             else{
+                // Set it to white and add to array for faster calculation
                 image.at<uchar>(i, j) = 255;
                 whitePoints[0][pointCount] = i;
                 whitePoints[1][pointCount] = j;
@@ -158,31 +198,31 @@ void preFiltering(Mat rawImage, int upperColorRange, int lowerColorRange){
             }
         }
     }
-    // for(int i=0; i<pointCount; i++)
-    //     cout << "{ " << whitePoints[0][i] << ", " << whitePoints[1][i] << " }" << endl;
+    // Keep processing if there is at least one point
     if(pointCount > 0)
         drawBoundingArea(rawImage, image, whitePoints, pointCount);
     
     imshow("Test", rawImage);
-    waitKey(0);
+    cvWaitKey(0);
 }
 
 int main(int argc, char **argv){
-    int upperColor, lowerColor;
-    String filename = "resize-4500.mp4";
+    int lowerColor;
     VideoCapture capture(filename);
-    if(!capture.isOpened())
-        throw "Error when reading steam_avi";
+    if(!capture.isOpened()){
+        perror("Error when reading video");
+        return 0;
+    }
     
     Mat frame;
     // Pass by reference
-    colorCalculation(&upperColor, &lowerColor);
+    colorCalculation(&lowerColor);
 
     while(true){
         capture >> frame;
         if(frame.empty())
             break;
-        preFiltering(frame, upperColor, lowerColor);
+        preFiltering(frame, lowerColor);
         waitKey(20); // waits to display frame
     }
     waitKey(0); // key press to close window
