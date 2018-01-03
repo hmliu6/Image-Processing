@@ -48,7 +48,7 @@ def colorCalculation():
     upperColor = 255
     lowerColor = int(255.0 * lowerDistance/maxDepthRange)
 
-def imageProcess():
+def rodProcessing():
     # Read image from ImageTest folder
     imagePath = os.path.join(imageDir, ('test' + str(imageNumber) + '-' + str(maxDepthRange) + '.png'))
     rawImage = cv2.imread(imagePath)
@@ -133,7 +133,26 @@ def imageProcess():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+def ballTracking():
+    # Read image from ImageTest folder
+    imagePath = os.path.join(imageDir, ('throwing' + str(imageNumber) + '-' + str(maxDepthRange) + '.png'))
+    rawImage = cv2.imread(imagePath)
+    # Prevent directly modifying original image
+    image = cv2.cvtColor(rawImage, cv2.COLOR_BGR2GRAY)
+    dummyImage = image.copy()
+
+    # traverses through height of the image
+    for i in range (dummyImage.shape[0]):
+        # traverses through width of the image
+        for j in range (dummyImage.shape[1]):
+            # Since fence is always higher than kinect camera, we just take the upper depth map
+            if (dummyImage[i][j] >= lowerColor):
+                dummyImage[i][j] = 0
+
+    cv2.imshow("output", dummyImage)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 parsing()
 colorCalculation()
-imageProcess()
+ballTracking()
