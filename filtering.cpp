@@ -116,7 +116,7 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
         // New Algorithm: Find width of all objects in line and ignore unreasonable width
         int temp = 1;
         for(int i=temp; i<rowWhiteCount; i++){
-            if(rowWhiteNumber[i] - rowWhiteNumber[i-1] != 1){
+            if(rowWhiteNumber[i] - rowWhiteNumber[i-1] != 1 || (i == rowWhiteCount - 1 && rowWhiteNumber[i] - rowWhiteNumber[i-1] == 1)){
                 int width = rowWhiteNumber[i-1] - rowWhiteNumber[temp-1];
                 if(width != 0 && width <= rodWidth){
                     // Simply take middle one in the consecutive numbers
