@@ -59,14 +59,10 @@ char* pathParser(const char *fileDir){
     return parsedPath;
 }
 
-// Draw function for finding inner circle
-void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount){
-    // Centre of bounding circle (x, y)
-    Point centre;
-    centre.x = 0; centre.y = 0;
+int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
     // Initialize array with all zero to store satisfied x-coordinates
     int *rowWhiteNumber = (int *)malloc(image.rows * sizeof(int));
-    int rowWhiteCount = 0;
+    int rowWhiteCount = 0, yCoordinates = 0;
     for(int i=0; i<10; i++)
         rowWhiteNumber[i] = -1;
 
@@ -108,19 +104,27 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
 
     if(rowWhiteCount > 0){
         for(int i=0; i<rowWhiteCount; i++)
-            centre.x += rowWhiteNumber[i];
+            yCoordinates += rowWhiteNumber[i];
         // Take sum of average to become x-coordinate of centre
-        centre.x = int(centre.x / rowWhiteCount);
+        yCoordinates = int(yCoordinates / rowWhiteCount);
+        free(rowWhiteNumber);
+        return yCoordinates;
     }
+    else{
+        free(rowWhiteNumber);
+        return -1;
+    }
+}
 
-    int listOfHeight = 0, countList = 0;
+int getCircleCoordinates(Mat image, int **whitePoints, int pointCount, int centreX){
+    int listOfHeight = 0, countList = 0, centreY = 0;
     bool blackZone = false;
     for(int i=image.cols/2; i>=0; i--){
         int count = 0;
         for(int j=0; j<pointCount; j++){
             // Test every points if they are inside circle, Increase count
             int dY = pow((whitePoints[0][j] - i), 2);
-            int dX = pow((whitePoints[1][j] - centre.x), 2);
+            int dX = pow((whitePoints[1][j] - centreX), 2);
             // Circle that must have smaller radius than inner one
             if(dX + dY < pow(20, 2))
                 count += 1;
@@ -137,9 +141,15 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
         }
     }
     // Take sum of average to get y-coordinate of centre
-    if(countList > 0)
-        centre.y = int(listOfHeight / countList);
-    
+    if(countList > 0){
+        centreY = int(listOfHeight / countList);
+        return centreY;
+    }
+    else
+        return -1;
+}
+
+int getCircleRadius(int **whitePoints, int pointCount, Point centre){
     // Test for the maximum acceptable radius
     int largestRadius = 0;
     // 50 can be other values which is sufficiently large enough
@@ -160,6 +170,30 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
             largestRadius = i;
         }
     }
+    if(largestRadius > 0)
+        return largestRadius;
+    else
+        return -1;
+}
+
+// Draw function for finding inner circle
+void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount){
+    // Centre of bounding circle (x, y)
+    Point centre;
+    centre.x = 0; centre.y = 0;
+    
+    centre.x = getRodCoordinates(image, whitePoints, pointCount);
+    if(centre.x == -1)
+        return;
+
+    centre.y = getCircleCoordinates(image, whitePoints, pointCount, centre.x);
+    if(centre.y == -1)
+        return;
+    
+    int largestRadius = getCircleRadius(whitePoints, pointCount, centre);
+    if(largestRadius == -1)
+        return;
+    
     // Draw circle in raw image instead of processed image
     circle(rawImage, centre, largestRadius, CV_RGB(255, 255, 255), 2);
 }
