@@ -13,7 +13,9 @@
 using namespace std;
 using namespace cv;
 
-const char* imageDir = "sampleImage";
+cv::Mat image;
+
+const char* imageDir = "boundaryCase";
 // Here we use millimeter
 const int fenceHeight = 2500;
 const int kinectHeight = 1800;
@@ -22,6 +24,7 @@ const int tolerance = 200;
 const int maxDepthRange = 8000;
 const int imageNumber = 1;
 const int rodLength = 35;
+const int rodWidth = 5;
 
 // Calculate minimum meaningful colour range
 void colorCalculation(int *lowerColor){
@@ -103,12 +106,34 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
     }
 
     if(rowWhiteCount > 0){
-        for(int i=0; i<rowWhiteCount; i++)
-            yCoordinates += rowWhiteNumber[i];
         // Take sum of average to become x-coordinate of centre
-        yCoordinates = int(yCoordinates / rowWhiteCount);
+        // for(int i=0; i<rowWhiteCount; i++){
+        //     cout << rowWhiteNumber[i] << endl;
+        //     yCoordinates += rowWhiteNumber[i];
+        // }
+        // yCoordinates = int(yCoordinates / rowWhiteCount);
+
+        // New Algorithm: Find width of all objects in line and ignore unreasonable width
+        int temp = 1;
+        for(int i=temp; i<rowWhiteCount; i++){
+            if(rowWhiteNumber[i] - rowWhiteNumber[i-1] != 1){
+                int width = rowWhiteNumber[i-1] - rowWhiteNumber[temp-1];
+                if(width != 0 && width <= rodWidth){
+                    // Simply take middle one in the consecutive numbers
+                    yCoordinates = rowWhiteNumber[temp - 1 + int(width/2)];
+
+                    // Free used objects to prevent overflow
+                    free(rowWhiteNumber);
+                    return yCoordinates;
+                }
+                else{
+                    temp = i + 1;
+                }
+            }
+        }
+        // Free used objects to prevent overflow
         free(rowWhiteNumber);
-        return yCoordinates;
+        return -1;
     }
     else{
         free(rowWhiteNumber);
@@ -180,7 +205,6 @@ int getCircleRadius(int **whitePoints, int pointCount, Point centre){
 void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount){
     // Centre of bounding circle (x, y)
     Point centre;
-    centre.x = 0; centre.y = 0;
     
     centre.x = getRodCoordinates(image, whitePoints, pointCount);
     if(centre.x == -1)
@@ -198,48 +222,55 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
     circle(rawImage, centre, largestRadius, CV_RGB(255, 255, 255), 2);
 }
 
+void preFiltering(cv::Mat rawImage, int lowerColorRange){
+    // rawImage.copyTo(image);
+    int *whitePoints[2], pointCount = 0;
+    // whitePoints[0] = set of y-coordinates
+    whitePoints[0] = (int *)malloc(10000 * sizeof(int));
+    // whitePoints[1] = set of x-coordinates
+    whitePoints[1] = (int *)malloc(10000 * sizeof(int));
+    // Filter out unrelated pixels
+    for(int j=0; j<image.cols; j++){
+        for(int i=0; i<image.rows; i++){
+            // Assume that the circle must be higher than image centre
+            if(i >= image.cols/2)
+                image.at<uchar>(i, j) = 0;
+            // Trim out leftmost and rightmost 1/8 image to reduce noise
+            else if(j <= image.rows/8)
+                image.at<uchar>(i, j) = 0;
+            else if(j >= image.rows* 7/8)
+                image.at<uchar>(i, j) = 0;
+            // Set all smaller than minimum colour value points to zero
+            else if(image.at<uchar>(i, j) <= lowerColorRange)
+                image.at<uchar>(i, j) = 0;
+            else{
+                // Set it to white and add to array for faster calculation
+                image.at<uchar>(i, j) = 255;
+                whitePoints[0][pointCount] = i;
+                whitePoints[1][pointCount] = j;
+                pointCount += 1;
+            }
+        }
+    }
+    // Keep processing if there is at least one point
+    if(pointCount > 0)
+        drawBoundingArea(rawImage, image, whitePoints, pointCount);
+    free(whitePoints[0]);
+    free(whitePoints[1]);
+}
+
 // Get a filtered image for finding bounding circle
-void preFiltering(char *filePath, int lowerColorRange){
-	cv::Mat rawImage, image;
+void imageFopen(char *filePath, int lowerColorRange){
+	cv::Mat rawImage;
 	rawImage = imread(filePath, 1);
 
 	if (!rawImage.data)
 		cout << "Cannot find document!!!" << endl;
 	else{
-        int *whitePoints[2], pointCount = 0;
-        // whitePoints[0] = set of y-coordinates
-        whitePoints[0] = (int *)malloc(10000 * sizeof(int));
-        // whitePoints[1] = set of x-coordinates
-        whitePoints[1] = (int *)malloc(10000 * sizeof(int));
         // After opening files, convert to greyscale and pass to processing function
-		cvtColor(rawImage, image, COLOR_BGR2GRAY);
-        // Filter out unrelated pixels
-        for(int j=0; j<image.cols; j++){
-            for(int i=0; i<image.rows; i++){
-                // Assume that the circle must be higher than image centre
-                if(i >= image.cols/2)
-                    image.at<uchar>(i, j) = 0;
-                // Trim out leftmost and rightmost 1/8 image to reduce noise
-                else if(j <= image.rows/8)
-                    image.at<uchar>(i, j) = 0;
-                else if(j >= image.rows* 7/8)
-                    image.at<uchar>(i, j) = 0;
-                // Set all smaller than minimum colour value points to zero
-                else if(image.at<uchar>(i, j) <= lowerColorRange)
-                    image.at<uchar>(i, j) = 0;
-                else{
-                    // Set it to white and add to array for faster calculation
-                    image.at<uchar>(i, j) = 255;
-                    whitePoints[0][pointCount] = i;
-                    whitePoints[1][pointCount] = j;
-                    pointCount += 1;
-                }
-            }
-        }
-        // Keep processing if there is at least one point
-        if(pointCount > 0)
-            drawBoundingArea(rawImage, image, whitePoints, pointCount);
-        
+        // Here is only for reading image since image is stored in RGBA
+        cvtColor(rawImage, image, COLOR_BGR2GRAY);
+        preFiltering(rawImage, lowerColorRange);
 		imshow("Test", rawImage);
 		cvWaitKey(0);
 	}
@@ -247,12 +278,8 @@ void preFiltering(char *filePath, int lowerColorRange){
 
 int main(int argc, char **argv){
     int lowerColor;
-    // Pass by reference
     colorCalculation(&lowerColor);
-
     char* filePath = pathParser(imageDir);
-
-    preFiltering(filePath, lowerColor);
-
+    imageFopen(filePath, lowerColor);
     return 0;
 }
