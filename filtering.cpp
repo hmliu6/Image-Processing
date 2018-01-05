@@ -15,7 +15,11 @@ using namespace cv;
 
 cv::Mat image;
 
-const char* imageDir = "boundaryCase";
+// Directories name which are stored images
+const char* imageDir = "highestRod";
+// const char* imageDir = "sampleImage";
+// const char* imageDir = "boundaryCase";
+
 // Here we use millimeter
 const int fenceHeight = 2500;
 const int kinectHeight = 1800;
@@ -88,7 +92,8 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
             garbage = false;
         }
         else{
-            if(whitePoints[0][i] - lastHeight == 1 && !garbage){
+            // Give tolerance since poor accuracy for long distance
+            if(whitePoints[0][i] - lastHeight <= 2 && !garbage){
                 // Keep counting if we detected consecutive white
                 consecutiveCount += 1;
                 lastHeight = whitePoints[0][i];
@@ -117,8 +122,9 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
         int temp = 1;
         for(int i=temp; i<rowWhiteCount; i++){
             if(rowWhiteNumber[i] - rowWhiteNumber[i-1] != 1 || (i == rowWhiteCount - 1 && rowWhiteNumber[i] - rowWhiteNumber[i-1] == 1)){
-                int width = rowWhiteNumber[i-1] - rowWhiteNumber[temp-1];
-                if(width != 0 && width <= rodWidth){
+                // Numbers represent pixels, so width has to +1
+                int width = rowWhiteNumber[i-1] - rowWhiteNumber[temp-1] + 1;
+                if(width > 1 && width <= rodWidth){
                     // Simply take middle one in the consecutive numbers
                     yCoordinates = rowWhiteNumber[temp - 1 + int(width/2)];
 
@@ -245,7 +251,6 @@ void preFiltering(cv::Mat rawImage, int lowerColorRange){
                 image.at<uchar>(i, j) = 0;
             else{
                 // Set it to white and add to array for faster calculation
-                image.at<uchar>(i, j) = 255;
                 whitePoints[0][pointCount] = i;
                 whitePoints[1][pointCount] = j;
                 pointCount += 1;
