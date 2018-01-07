@@ -16,9 +16,9 @@ using namespace cv;
 cv::Mat image;
 
 // Directories name which are stored images
-const char* imageDir = "highestRod";
-// const char* imageDir = "sampleImage";
-// const char* imageDir = "boundaryCase";
+const char* highestRodDir = "highestRod";
+const char* imageDir = "sampleImage";
+const char* boundaryCaseDir = "boundaryCase";
 
 // Here we use millimeter
 const int fenceHeight = 2500;
@@ -26,9 +26,10 @@ const int kinectHeight = 1800;
 const int fenceToKinect = 3000;
 const int tolerance = 200;
 const int maxDepthRange = 8000;
-const int imageNumber = 1;
 const int rodLength = 35;
-const int rodWidth = 5;
+const int rodWidth = 7;
+
+int imageNumber = 1;
 
 // Calculate minimum meaningful colour range
 void colorCalculation(int *lowerColor){
@@ -45,7 +46,7 @@ char* pathParser(const char *fileDir){
     char buffer[10];
     int pathLength = 0;
     // Here we define image path as "sampleImage/test1-4500.png"
-    pathLength = strlen(fileDir) + 1 + strlen("test") + 6 + strlen(".png");
+    pathLength = strlen(fileDir) + 1 + strlen("test") + int(log(imageNumber)) + 6 + strlen(".png");
     parsedPath = (char *)malloc(sizeof(char) * (pathLength+1));
 
     for(int i=0; i<strlen(fileDir); i++)
@@ -77,7 +78,8 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
     bool chosen = false, garbage = false;
     // Finding x-coordinate of inner circle in set of white points
     for(int i=0; i<pointCount; i++){
-        // cout << "{" << whitePoints[1][i] << ", " << whitePoints[0][i] << "}" << endl;
+        // if(whitePoints[1][i] > 180 && whitePoints[1][i] < 190)
+        //     cout << "{" << whitePoints[1][i] << ", " << whitePoints[0][i] << "}" << endl;
         // All points are already sorted according to x-coordinate
         if(whitePoints[0][i] < image.rows/2){
             currentX = 0;
@@ -98,8 +100,8 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
                 consecutiveCount += 1;
                 lastHeight = whitePoints[0][i];
             }
-            else
-                garbage = true;
+            // else
+            //     garbage = true;
             // Large consecutive count means that it is probably part of rod
             if(consecutiveCount >= rodLength && !chosen){
                 // Mark it and denoted as chosen to prevent re-adding
@@ -111,6 +113,8 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
     }
 
     if(rowWhiteCount > 0){
+        for(int i=0; i<rowWhiteCount; i++)
+            cout << rowWhiteNumber[i] << endl;
         // Take sum of average to become x-coordinate of centre
         // for(int i=0; i<rowWhiteCount; i++){
         //     cout << rowWhiteNumber[i] << endl;
@@ -123,7 +127,12 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
         for(int i=temp; i<rowWhiteCount; i++){
             if(rowWhiteNumber[i] - rowWhiteNumber[i-1] != 1 || (i == rowWhiteCount - 1 && rowWhiteNumber[i] - rowWhiteNumber[i-1] == 1)){
                 // Numbers represent pixels, so width has to +1
+                cout << "A: " << rowWhiteNumber[i-1] << endl;
+                cout << "B: " << rowWhiteNumber[temp-1] << endl;
                 int width = rowWhiteNumber[i-1] - rowWhiteNumber[temp-1] + 1;
+                if(i == rowWhiteCount - 1 && rowWhiteNumber[i] - rowWhiteNumber[i-1] == 1)
+                    width = rowWhiteNumber[i] - rowWhiteNumber[temp-1] + 1;
+                cout << width << endl;
                 if(width > 1 && width <= rodWidth){
                     // Simply take middle one in the consecutive numbers
                     yCoordinates = rowWhiteNumber[temp - 1 + int(width/2)];
@@ -157,14 +166,14 @@ int getCircleCoordinates(Mat image, int **whitePoints, int pointCount, int centr
             int dY = pow((whitePoints[0][j] - i), 2);
             int dX = pow((whitePoints[1][j] - centreX), 2);
             // Circle that must have smaller radius than inner one
-            if(dX + dY < pow(20, 2))
+            if(dX + dY < pow(15, 2))
                 count += 1;
         }
         // If we get enough amounts of count, it means that now it is looping in the black area
         if(countList > 10)
             blackZone = true;
         // Once we get a circle with too many white points, then we stop looping
-        if(count >= 20 && blackZone)
+        if(count >= 10 && blackZone)
             break;
         else if(count <= 10){
             listOfHeight += i;
@@ -213,19 +222,25 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
     Point centre;
     
     centre.x = getRodCoordinates(image, whitePoints, pointCount);
-    if(centre.x == -1)
+    if(centre.x == -1){
+        cout << "Cannot locate rod" << endl;
         return;
+    }
 
     centre.y = getCircleCoordinates(image, whitePoints, pointCount, centre.x);
-    if(centre.y == -1)
+    if(centre.y == -1){
+        cout << "Cannot find centre" << endl;
         return;
+    }
     
     int largestRadius = getCircleRadius(whitePoints, pointCount, centre);
-    if(largestRadius == -1)
+    if(largestRadius == -1){
+        cout << "Cannot find radius" << endl;
         return;
+    }
     
     // Draw circle in raw image instead of processed image
-    circle(rawImage, centre, largestRadius, CV_RGB(255, 255, 255), 2);
+    circle(image, centre, largestRadius, CV_RGB(255, 255, 255), 2);
 }
 
 void preFiltering(cv::Mat rawImage, int lowerColorRange){
@@ -270,13 +285,13 @@ void imageFopen(char *filePath, int lowerColorRange){
 	rawImage = imread(filePath, 1);
 
 	if (!rawImage.data)
-		cout << "Cannot find document!!!" << endl;
+		cout << "Cannot find " << filePath << endl;
 	else{
         // After opening files, convert to greyscale and pass to processing function
         // Here is only for reading image since image is stored in RGBA
         cvtColor(rawImage, image, COLOR_BGR2GRAY);
         preFiltering(rawImage, lowerColorRange);
-		imshow("Test", rawImage);
+		imshow("Test", image);
 		cvWaitKey(0);
 	}
 }
@@ -284,7 +299,29 @@ void imageFopen(char *filePath, int lowerColorRange){
 int main(int argc, char **argv){
     int lowerColor;
     colorCalculation(&lowerColor);
-    char* filePath = pathParser(imageDir);
-    imageFopen(filePath, lowerColor);
+    imageNumber = 1;
+    for(int i=0; i<2; i++){
+        char* filePath = pathParser(imageDir);
+        cout << filePath << endl;
+        imageFopen(filePath, lowerColor);
+        imageNumber += 1;
+        cout << "---------------------" << endl;
+    }
+    imageNumber = 1;
+    for(int i=0; i<4; i++){
+        char* filePath = pathParser(boundaryCaseDir);
+        cout << filePath << endl;
+        imageFopen(filePath, lowerColor);
+        imageNumber += 1;
+        cout << "---------------------" << endl;
+    }
+    imageNumber = 1;
+    for(int i=0; i<23; i++){
+        char* filePath = pathParser(highestRodDir);
+        cout << filePath << endl;
+        imageFopen(filePath, lowerColor);
+        imageNumber += 1;
+        cout << "---------------------" << endl;
+    }
     return 0;
 }
