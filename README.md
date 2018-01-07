@@ -18,6 +18,27 @@ For C++ codes, this project can be compiled on Windows 10 or Mac OS or Ubuntu 16
 
 2. RUN `brew install opencv` in your local machine
 
+## Stage
+
+### Finished
+
+* Recognize shorter fence which have clear depth returned values
+
+* Algorithms calculate dynamically and not relied on fixed parameters
+
+* Ignore objects near fences
+
+* Process with given images or videos
+
+### Bug
+
+* Few errors when not stable moving in live video (Will be fixed in kinect detection project, use array to store sequences and check)
+* Recognize longer fence
+
+### Not finished
+
+* Locate throwing balls (Probably needs signal)
+
 ## Usage
 
 ### File: ${FILENAME}.cpp
@@ -32,7 +53,28 @@ bash OpenCV-compile.sh ${FILENAME}
 
 ### File: filter.py
 
-For more information
+Prototype for processing image and re-draw the fence. For more options,
 ```
 python filter.py --help
+```
+
+### File: filtering.cpp
+
+Re-draw and calculate fence based on input images with more efficient way
+```
+bash OpenCV-compile.sh filtering
+```
+
+### File: video-opening.cpp
+
+Re-draw and calculate fence based on input video (Discontinuous, only for testing)
+```
+bash OpenCV-compile.sh video-opening
+```
+
+### File: shield.cpp
+
+Current idea: detect throwing ball with removing background and get contours
+```
+bash OpenCV-compile.sh shield
 ```
