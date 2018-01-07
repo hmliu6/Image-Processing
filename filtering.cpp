@@ -173,7 +173,7 @@ int getCircleCoordinates(Mat image, int **whitePoints, int pointCount, int centr
         if(countList > 10)
             blackZone = true;
         // Once we get a circle with too many white points, then we stop looping
-        if(count >= 10 && blackZone)
+        if(count > 10 && blackZone)
             break;
         else if(count <= 10){
             listOfHeight += i;
@@ -203,7 +203,7 @@ int getCircleRadius(int **whitePoints, int pointCount, Point centre){
                 count += 1;
         }
         // Once we get a circle with too many white points, then we stop looping
-        if(count > 20)
+        if(count > 10)
             break;
         // Keep storing largest radius value
         else if(count <= 10 && i > largestRadius){
