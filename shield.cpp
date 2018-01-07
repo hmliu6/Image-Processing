@@ -39,7 +39,7 @@ char* pathParser(const char *fileDir){
     char buffer[10];
     int pathLength = 0;
     // Here we define image path as "throwing-ball/image1.png"
-    pathLength = strlen(fileDir) + 1 + strlen("image") + int(log(imageNumber)) + strlen(".png");
+    pathLength = strlen(fileDir) + 1 + strlen("image") + int(log(imageNumber)) + 1 + strlen(".png");
     parsedPath = (char *)malloc(sizeof(char) * (pathLength+1));
 
     for(int i=0; i<strlen(fileDir); i++)
