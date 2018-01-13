@@ -22,15 +22,16 @@ const int tolerance = 200;
 const int maxDepthRange = 8000;
 const int rodLength = 35;
 const int rodWidth = 5;
-int imageNumber = 26;
+int imageNumber = 29;
 
 // Calculate minimum meaningful colour range
-void colorCalculation(int *lowerColor){
+void colorCalculation(int *lowerColor, int *upperColor){
     // Pythagoras's theorem, a^2 + b^2 = c^2
     double centreToKinect = sqrt(pow(fenceHeight - kinectHeight, 2) + pow(fenceToKinect, 2));
     double lowerDistance = centreToKinect - tolerance;
     // Map from depth value to grayscale
     *lowerColor = int(255.0 * lowerDistance/maxDepthRange);
+    *upperColor = int(255.0 * 6000/maxDepthRange);
 }
 
 // Only for image inputs in defined paths
@@ -58,35 +59,31 @@ char* pathParser(const char *fileDir){
 }
 
 // Get a filtered image for finding bounding circle
-void imageFopen(char *shieldImagePath, char *baseImagePath, int lowerColorRange){
-    cv::Mat shieldRawImage, shield2RawImage, baseRawImage, shieldImage, shield2Image, baseImage;
-	shieldRawImage = imread(shieldImagePath, 1);
-    // shield2RawImage = imread(shield2ImagePath, 1);
+void imageFopen(char *baseImagePath, int lowerColorRange, int upperColorRange){
+    cv::Mat baseRawImage, baseImage;
     baseRawImage = imread(baseImagePath, 1);
 
-	if (!shieldRawImage.data || !baseRawImage.data)
+	if (!baseRawImage.data)
 		cout << "Cannot find document!!!" << endl;
 	else{
         // After opening files, convert to greyscale and pass to processing function
         // Here is only for reading image since image is stored in RGBA
-        cvtColor(shieldRawImage, shieldImage, COLOR_BGR2GRAY);
-        // cvtColor(shield2RawImage, shield2Image, COLOR_BGR2GRAY);
         cvtColor(baseRawImage, baseImage, COLOR_BGR2GRAY);
 
         // Remove all pixels same in shield image and base image
-        for(int j=0; j<shieldImage.cols; j++){
-            for(int i=0; i<shieldImage.rows; i++){
-                if(shieldImage.at<uchar>(i, j) > 0)
+        for(int j=0; j<baseImage.cols; j++){
+            for(int i=0; i<baseImage.rows; i++){
+                if(i > baseImage.rows * 4/5)
                     baseImage.at<uchar>(i, j) = 0;
-                else if(baseImage.at<uchar>(i, j) > 0)
-                    baseImage.at<uchar>(i, j) = 255;
+                else if(baseImage.at<uchar>(i, j) > upperColorRange)
+                    baseImage.at<uchar>(i, j) = 0;
             }
         }
         //
 
         // Canny Edge
         cv::Mat mEdge, mThres;
-        medianBlur(baseImage, baseImage, 5); /*Just to smooth the Edges*/
+        medianBlur(baseImage, baseImage, 7); /*Just to smooth the Edges*/
         /*This is for Automatically calculating the Canny Threshold values*/
         double CannyAccThresh = threshold(baseImage, mThres, 0, 255, CV_THRESH_BINARY | CV_THRESH_OTSU);
         double CannyThresh = 0.1 * CannyAccThresh;
@@ -94,7 +91,7 @@ void imageFopen(char *shieldImagePath, char *baseImagePath, int lowerColorRange)
         Canny(baseImage, mEdge, CannyThresh, CannyAccThresh); 
 
         Mat kernal_E, kernal_D;
-        int erosion_size = 2,dilation_size = 2;
+        int erosion_size = 4, dilation_size = 4;
         kernal_E = getStructuringElement(MORPH_RECT, Size(2 * erosion_size + 1, 2 * erosion_size+1),
                                          Point(erosion_size, erosion_size));
         kernal_D = getStructuringElement(MORPH_RECT, Size(2 * dilation_size + 1, 2 * dilation_size+1),
@@ -113,9 +110,13 @@ void imageFopen(char *shieldImagePath, char *baseImagePath, int lowerColorRange)
         for(int i = 0; i < contours.size(); i++)
             approxPolyDP(Mat(contours[i]), contours_poly[i], 1, true);
 
-        for(int i = 0; i < contours_poly.size(); i++)
-            if(contours_poly[i].size() > 7)//Just a filter You can add more here
+        for(int i = 0; i < contours_poly.size(); i++){
+            cout << contours_poly[i].size() << endl;
+            if(contours_poly[i].size() > 5 && contours_poly[i].size() < 30)//Just a filter You can add more here
                 drawContours(baseRawImage, contours_poly, i, Scalar(0, 255, 0), 2);
+            else
+                drawContours(baseRawImage, contours_poly, i, Scalar(255, 0, 0), 2);
+        }
 
         imshow("mResult", baseRawImage);
         //
@@ -126,14 +127,18 @@ void imageFopen(char *shieldImagePath, char *baseImagePath, int lowerColorRange)
 }
 
 int main(int argc, char **argv){
-    int lowerColor;
-    colorCalculation(&lowerColor);
-    char* shieldImage = pathParser(imageDir);
-    for(int i=1; i<=44; i++){
-        imageNumber = imageNumber + 1;
+    int lowerColor, upperColor;
+    colorCalculation(&lowerColor, &upperColor);
+    for(int i=0; i<=11; i++){
         char* baseImage = pathParser(imageDir);
         cout << baseImage << endl;
-        imageFopen(shieldImage, baseImage, lowerColor);
+        imageFopen(baseImage, lowerColor, upperColor);
+        imageNumber = imageNumber + 1;
     }
+
+    // imageNumber = 31;
+    // char* baseImage = pathParser(imageDir);
+    // cout << baseImage << endl;
+    // imageFopen(baseImage, lowerColor);
     return 0;
 }
