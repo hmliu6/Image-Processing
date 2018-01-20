@@ -22,8 +22,11 @@ for i in range(70):
             if (i >= image.shape[0] / 2):
                 image[i][j] = (0, 0, 0)
 
+    # medianBlur(src, dst, i);
     final0 = cv2.medianBlur(image, 2 * medianBlurValue + 1)
+    # cvtColor(rawImage, image, COLOR_BGR2GRAY);
     gray = cv2.cvtColor(final0, cv2.COLOR_BGR2GRAY)
+    # cv::Canny(image,contours,10,350);
     edged = cv2.Canny(gray, cannyLower, cannyUpper)
 
     (_, cnts, _) = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -44,27 +47,11 @@ for i in range(70):
         cv2.line(image, (cx - 5, cy), (cx + 5, cy), (0, 255, 255), 2)
         cv2.line(image, (cx, cy - 5), (cx, cy + 5), (0, 255, 255), 2)
 
-        for i, point in enumerate(points):
-            if (i == 0):
-                continue
-            else:
-                cv2.line(image, (points[i-1][0], points[i-1][1]), (point[0], point[1]), (255, 255, 0), 2)
-
-        ellipse = cv2.fitEllipse(c)
-        # cv2.ellipse(image, ellipse, (0, 0, 255), 2)
-
-        (xC,yC),radius = cv2.minEnclosingCircle(c)
-        center = (int(xC),int(yC))
-        radius = int(radius)
-        # cv2.circle(image, center, radius,(0, 255, 0), 2)
-
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.01 * peri, True)
-        (x, y, w, h) = cv2.boundingRect(approx)
-        area = cv2.contourArea(c)
-        # print "index: {}, original: {}, approx: {}, area: {}".format(index, len(c), len(approx), str(area))
-        # cv2.drawContours(image, [approx], -1, (255, 255, 0), 2)
-        # cv2.putText(image, str(index), (x+(w/2), y+(h/2)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (4, 4, 253), 2)
+    for i, point in enumerate(points):
+        if (i == 0):
+            continue
+        else:
+            cv2.line(image, (points[i-1][0], points[i-1][1]), (point[0], point[1]), (255, 255, 0), 2)
 
     if(detected == -3):
         del points[:]
