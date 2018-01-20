@@ -30,7 +30,9 @@ const char* imageDir = "throwing-ball";
 
 // Here we use millimeter
 const int fenceHeight = 2500;
-const int kinectHeight = 1800;
+// Kinect height may be changed
+const int kinectHeight = 1300;
+// Smallest value here
 const int fenceToKinect = 3000;
 const int tolerance = 200;
 const int maxDepthRange = 8000;
@@ -42,6 +44,7 @@ const int medianBlurValue = 5;
 const int cannyLower = 10;
 const int cannyUpper = 150;
 int detectedBall = 0, detectedIndex = 0;
+// Path tracing array, 20 is enough
 vector<Point2f> ballCentre(20);
 
 pthread_t ballTracking;
@@ -50,6 +53,7 @@ pthread_mutex_t mutexLock = PTHREAD_MUTEX_INITIALIZER;
 class Queue{
 	public:
 		Queue(int inputSize){
+            // Constructor
 			validElement = 0;
 			circleArray = (circleInfo *)malloc(sizeof(circleInfo) * inputSize);
 			for(int i=0; i<inputSize; i++){
@@ -60,6 +64,7 @@ class Queue{
 			arraySize = inputSize;
 		}
 		void enqueue(cv::Point input, int maxRadius){
+            // Dequeue and enqueue input element if full
 			if(validElement < arraySize){
 				circleArray[validElement].centre.x = input.x;
 				circleArray[validElement].centre.y = input.y;
@@ -84,12 +89,14 @@ class Queue{
 			int index;
 			if(validElement == 1)
 				return circleArray[validElement - 1];
-		
+
+            // Sort according to centre distance with (0, 0) and radius
 			int *tempDistance = (int *)malloc(sizeof(int) * validElement);
 			for(int i=0; i<validElement; i++)
 				tempDistance[i] = circleArray[i].distance * 1000 + circleArray[i].maxRadius;
 			sort(tempDistance, tempDistance + validElement);
 
+            // Take most reasonable one to be centre
             int desiredList[3], desiredValue;
             for(int i=0; i<3; i++)
                 desiredList[i] = tempDistance[int(validElement / 2) - 1 + i];
@@ -105,6 +112,7 @@ class Queue{
 				if(circleArray[index].distance * 1000 + circleArray[index].maxRadius == desiredValue)
 					break;
 			
+            free(tempDistance);
 			return circleArray[index];
 		}
 
@@ -420,6 +428,7 @@ void *ballFilter(void *input){
         detectedIndex = 0;
     }
 
+    // Draw trace line with mutex lock to achieve mutually exclusive
     pthread_mutex_lock(&mutexLock);
     for(int i=1; i<detectedIndex; i++)
         cv::line(rawImage, ballCentre[i-1], ballCentre[i], Scalar(0, 255, 255), 2);
@@ -442,6 +451,7 @@ void imageFopen(char *filePath, int lowerColorRange){
         cvtColor(rawImage, image, COLOR_BGR2GRAY);
         image.copyTo(imageForBall);
 
+        // Create thread to perform two separated tasks
         pthread_create(&ballTracking, NULL, ballFilter, NULL);
         preFiltering(rawImage, lowerColorRange);
         pthread_join(ballTracking, NULL);
