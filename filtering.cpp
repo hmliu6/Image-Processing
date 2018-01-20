@@ -122,7 +122,7 @@ void colorCalculation(int *lowerColor){
     // Pythagoras's theorem, a^2 + b^2 = c^2
     double centreToKinect = sqrt(pow(fenceHeight - kinectHeight, 2) + pow(fenceToKinect, 2));
     double lowerDistance = centreToKinect - tolerance;
-    // Map from depth value to grayscale
+    // Map from depth value to grayscale, change here if using raw 16 bits
     *lowerColor = int(255.0 * lowerDistance/maxDepthRange);
 }
 
@@ -337,7 +337,7 @@ void preFiltering(cv::Mat rawImage, int lowerColorRange){
     whitePoints[0] = (int *)malloc(10000 * sizeof(int));
     // whitePoints[1] = set of x-coordinates
     whitePoints[1] = (int *)malloc(10000 * sizeof(int));
-    // Filter out unrelated pixels
+    // Filter out unrelated pixels, change here if using raw 16 bits
     for(int j=0; j<image.cols; j++){
         for(int i=0; i<image.rows; i++){
             // Assume that the circle must be higher than image centre
