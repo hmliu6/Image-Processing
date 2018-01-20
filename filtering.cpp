@@ -90,7 +90,17 @@ class Queue{
 				tempDistance[i] = circleArray[i].distance * 1000 + circleArray[i].maxRadius;
 			sort(tempDistance, tempDistance + validElement);
 
-			int desiredValue = tempDistance[int(validElement * 2 / 3)];
+            int desiredList[3], desiredValue;
+            for(int i=0; i<3; i++)
+                desiredList[i] = tempDistance[int(validElement / 2) - 1 + i];
+            for(int i=0; i<3; i++)
+                if(abs((desiredList[i] % 1000) - (desiredList[(i + 1) % 3] % 1000)) < 2){
+                    if(desiredList[i] > desiredList[(i + 1) % 3])
+                        desiredValue = desiredList[i];
+                    else
+                        desiredValue = desiredList[(i + 1) % 3];
+                }
+
 			for(index=0; index<validElement; index++)
 				if(circleArray[index].distance * 1000 + circleArray[index].maxRadius == desiredValue)
 					break;
@@ -259,7 +269,7 @@ int getCircleCoordinates(Mat image, int **whitePoints, int pointCount, int centr
 
 int getCircleRadius(int **whitePoints, int pointCount, Point centre){
     // Test for the maximum acceptable radius
-    int largestRadius = 0;
+    int largestRadius = 0, threshold = 40;
     // 50 can be other values which is sufficiently large enough
     for(int i=0; i<50; i++){
         int count = 0;
@@ -271,10 +281,10 @@ int getCircleRadius(int **whitePoints, int pointCount, Point centre){
                 count += 1;
         }
         // Once we get a circle with too many white points, then we stop looping
-        if(count > 15)
+        if(count > threshold)
             break;
         // Keep storing largest radius value
-        else if(count <= 15 && i > largestRadius){
+        else if(count <= threshold && i > largestRadius){
             largestRadius = i;
         }
     }
@@ -314,8 +324,6 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
     
     locationQueue->enqueue(centre, largestRadius);
 	circleInfo outputCircle = locationQueue->medianDistance();
-
-    cout << outputCircle.centre << endl;
 
 	// Draw circle in raw image instead of processed image
     pthread_mutex_lock(&mutexLock);
@@ -379,7 +387,6 @@ void *ballFilter(void *input){
 
     // Draw all contours with filled colour
     Scalar color(255, 0, 0);
-    cout << contours.size() << endl;
     // for(int i = 0; i < contours.size(); i++) // Iterate through each contour
     //     drawContours(rawImage, contours, i, color, CV_FILLED, 8, hierarchy);
 
