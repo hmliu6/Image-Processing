@@ -2,3 +2,4 @@
 
 # Compiled files
 *.o
+.vscode/
