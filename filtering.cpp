@@ -2,6 +2,7 @@
 #include <math.h>
 #include <iostream>
 #include <stdlib.h>
+#include <pthread.h>
 #include <string>
 
 #if defined(__WIN32__) || defined(__WIN64__)
@@ -42,6 +43,9 @@ const int cannyLower = 10;
 const int cannyUpper = 150;
 int detectedBall = 0, detectedIndex = 0;
 vector<Point2f> ballCentre(20);
+
+pthread_t ballTracking;
+pthread_mutex_t mutexLock = PTHREAD_MUTEX_INITIALIZER;
 
 class Queue{
 	public:
@@ -267,10 +271,10 @@ int getCircleRadius(int **whitePoints, int pointCount, Point centre){
                 count += 1;
         }
         // Once we get a circle with too many white points, then we stop looping
-        if(count > 10)
+        if(count > 15)
             break;
         // Keep storing largest radius value
-        else if(count <= 10 && i > largestRadius){
+        else if(count <= 15 && i > largestRadius){
             largestRadius = i;
         }
     }
@@ -314,7 +318,9 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
     cout << outputCircle.centre << endl;
 
 	// Draw circle in raw image instead of processed image
+    pthread_mutex_lock(&mutexLock);
 	circle(rawImage, outputCircle.centre, outputCircle.maxRadius, CV_RGB(255, 255, 255), 2);
+    pthread_mutex_unlock(&mutexLock);
 }
 
 void preFiltering(cv::Mat rawImage, int lowerColorRange){
@@ -352,17 +358,17 @@ void preFiltering(cv::Mat rawImage, int lowerColorRange){
     free(whitePoints[1]);
 }
 
-void ballFilter(cv::Mat image){
+void *ballFilter(void *input){
     cv::Mat cannyEdge;
     vector<vector<Point> > contours;
     vector<Vec4i> hierarchy;
 
     // Trim out lower half of image
-    for(int j=0; j<image.cols; j++){
-        for(int i=0; i<image.rows; i++){
+    for(int j=0; j<imageForBall.cols; j++){
+        for(int i=0; i<imageForBall.rows; i++){
             // Assume that the circle must be higher than image centre
-            if(i >= image.rows/2)
-                image.at<uchar>(i, j) = 0;
+            if(i >= imageForBall.rows/2)
+                imageForBall.at<uchar>(i, j) = 0;
         }
     }
 
@@ -389,9 +395,9 @@ void ballFilter(cv::Mat image){
             massCentre[i] = Point2f(moment[i].m10/moment[i].m00 , moment[i].m01/moment[i].m00);
         
         // Draw centre on image
-        cout << "{ " << massCentre[0].x << ", " << massCentre[0].y << " }" << endl;
-        cv::line(rawImage, cv::Point(massCentre[0].x - 5, massCentre[0].y), cv::Point(massCentre[0].x + 5, massCentre[0].y), Scalar(255, 255, 0), 2);
-        cv::line(rawImage, cv::Point(massCentre[0].x, massCentre[0].y - 5), cv::Point(massCentre[0].x, massCentre[0].y + 5), Scalar(255, 255, 0), 2);
+        // cout << "{ " << massCentre[0].x << ", " << massCentre[0].y << " }" << endl;
+        // cv::line(rawImage, cv::Point(massCentre[0].x - 5, massCentre[0].y), cv::Point(massCentre[0].x + 5, massCentre[0].y), Scalar(255, 255, 0), 2);
+        // cv::line(rawImage, cv::Point(massCentre[0].x, massCentre[0].y - 5), cv::Point(massCentre[0].x, massCentre[0].y + 5), Scalar(255, 255, 0), 2);
 
         // Record current first point to vector array
         ballCentre[detectedIndex] = massCentre[0];
@@ -407,13 +413,19 @@ void ballFilter(cv::Mat image){
         detectedIndex = 0;
     }
 
+    pthread_mutex_lock(&mutexLock);
     for(int i=1; i<detectedIndex; i++)
         cv::line(rawImage, ballCentre[i-1], ballCentre[i], Scalar(0, 255, 255), 2);
+    pthread_mutex_unlock(&mutexLock);
+
+    pthread_exit(NULL);
 }
 
 // Get a filtered image for finding bounding circle
 void imageFopen(char *filePath, int lowerColorRange){
 	rawImage = imread(filePath, 1);
+
+    pthread_mutex_init(&mutexLock, NULL);
 
 	if (!rawImage.data)
 		cout << "Cannot find " << filePath << endl;
@@ -422,8 +434,12 @@ void imageFopen(char *filePath, int lowerColorRange){
         // Here is only for reading image since image is stored in RGBA
         cvtColor(rawImage, image, COLOR_BGR2GRAY);
         image.copyTo(imageForBall);
+
+        pthread_create(&ballTracking, NULL, ballFilter, NULL);
         preFiltering(rawImage, lowerColorRange);
-        ballFilter(imageForBall);
+        pthread_join(ballTracking, NULL);
+
+        // ballFilter();
 		imshow("Test", rawImage);
 		cvWaitKey(0);
 	}
