@@ -22,6 +22,11 @@ typedef struct {
     int maxRadius;
 } circleInfo;
 
+typedef struct {
+    cv::Point ballCentre;
+    int zDistance;
+} ballInfo;
+
 // Directories name which are stored images
 const char* highestRodDir = "highestRod";
 const char* sampleImageDir = "sampleImage";
@@ -44,8 +49,7 @@ const int medianBlurValue = 5;
 const int cannyLower = 10;
 const int cannyUpper = 150;
 int detectedBall = 0, detectedIndex = 0;
-// Path tracing array, 20 is enough
-vector<Point2f> ballCentre(20);
+ballInfo ballPath[20];
 
 pthread_t ballTracking;
 pthread_mutex_t mutexLock = PTHREAD_MUTEX_INITIALIZER;
@@ -382,7 +386,7 @@ void *ballFilter(void *input){
     // Trim out lower half of image
     for(int j=0; j<imageForBall.cols; j++){
         for(int i=0; i<imageForBall.rows; i++){
-            // Assume that the circle must be higher than image centre
+            // Assume that the ball must be higher than image centre, change here if using raw 16 bits
             if(i >= imageForBall.rows/2)
                 imageForBall.at<uchar>(i, j) = 0;
         }
@@ -415,7 +419,9 @@ void *ballFilter(void *input){
         // cv::line(rawImage, cv::Point(massCentre[0].x, massCentre[0].y - 5), cv::Point(massCentre[0].x, massCentre[0].y + 5), Scalar(255, 255, 0), 2);
 
         // Record current first point to vector array
-        ballCentre[detectedIndex] = massCentre[0];
+        ballPath[detectedIndex].ballCentre = massCentre[0];
+        ballPath[detectedIndex].zDistance = imageForBall.at<uchar>(massCentre[0].y, massCentre[0].x);
+        cout << ballPath[detectedIndex].zDistance << endl;
         detectedIndex += 1;
         detectedBall = 1;
     }
@@ -431,7 +437,7 @@ void *ballFilter(void *input){
     // Draw trace line with mutex lock to achieve mutually exclusive
     pthread_mutex_lock(&mutexLock);
     for(int i=1; i<detectedIndex; i++)
-        cv::line(rawImage, ballCentre[i-1], ballCentre[i], Scalar(0, 255, 255), 2);
+        cv::line(rawImage, ballPath[i-1].ballCentre, ballPath[i].ballCentre, Scalar(0, 255, 255), 2);
     pthread_mutex_unlock(&mutexLock);
 
     pthread_exit(NULL);
