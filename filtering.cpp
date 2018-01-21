@@ -14,7 +14,7 @@
 using namespace std;
 using namespace cv;
 
-cv::Mat image, rawImage, imageForBall;
+cv::Mat rawImage, imageForBall;
 
 typedef struct {
 	cv::Point centre;
@@ -59,7 +59,7 @@ class Queue{
 		Queue(int inputSize){
             // Constructor
 			validElement = 0;
-			circleArray = (circleInfo *)malloc(sizeof(circleInfo) * inputSize);
+			circleArray = new circleInfo[inputSize];
 			for(int i=0; i<inputSize; i++){
 				circleArray[i].centre.x = -1;
 				circleArray[i].centre.y = -1;
@@ -67,6 +67,7 @@ class Queue{
 			}
 			arraySize = inputSize;
 		}
+        
 		void enqueue(cv::Point input, int maxRadius){
             // Dequeue and enqueue input element if full
 			if(validElement < arraySize){
@@ -89,13 +90,14 @@ class Queue{
                 circleArray[arraySize - 1].maxRadius = maxRadius;
 			}
 		}
+
 		circleInfo medianDistance(){
 			int index;
 			if(validElement == 1)
 				return circleArray[validElement - 1];
 
             // Sort according to centre distance with (0, 0) and radius
-			int *tempDistance = (int *)malloc(sizeof(int) * validElement);
+			int *tempDistance = new int[validElement];
 			for(int i=0; i<validElement; i++)
 				tempDistance[i] = circleArray[i].distance * 1000 + circleArray[i].maxRadius;
 			sort(tempDistance, tempDistance + validElement);
@@ -116,9 +118,13 @@ class Queue{
 				if(circleArray[index].distance * 1000 + circleArray[index].maxRadius == desiredValue)
 					break;
 			
-            free(tempDistance);
+            delete[] tempDistance;
 			return circleArray[index];
 		}
+
+        void deleteAllocation(){
+            delete[] circleArray;
+        }
 
 	private:
 		circleInfo *circleArray;
@@ -145,7 +151,7 @@ char* pathParser(const char *fileDir){
     int pathLength = 0;
     // Here we define image path as "sampleImage/test1-4500.png"
     pathLength = strlen(fileDir) + 1 + strlen("image") + int(log(imageNumber)) + 6 + strlen(".png");
-    parsedPath = (char *)malloc(sizeof(char) * (pathLength+1));
+    parsedPath = new char[pathLength + 1];
 
     for(int i=0; i<strlen(fileDir); i++)
         parsedPath[i] = fileDir[i];
@@ -162,9 +168,9 @@ char* pathParser(const char *fileDir){
     return parsedPath;
 }
 
-int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
+int getRodCoordinates(int imageWidth, int **whitePoints, int pointCount){
     // Initialize array with all zero to store satisfied x-coordinates
-    int *rowWhiteNumber = (int *)malloc(image.rows * sizeof(int));
+    int *rowWhiteNumber = new int[imageWidth];
     int rowWhiteCount = 0, yCoordinates = 0;
     for(int i=0; i<10; i++)
         rowWhiteNumber[i] = -1;
@@ -174,7 +180,7 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
     // Finding x-coordinate of inner circle in set of white points
     for(int i=0; i<pointCount; i++){
         // All points are already sorted according to x-coordinate
-        if(whitePoints[0][i] < image.rows/2){
+        if(whitePoints[0][i] < imageWidth / 2){
             currentX = 0;
             continue;
         }
@@ -206,15 +212,6 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
     }
 
     if(rowWhiteCount > 0){
-        // for(int i=0; i<rowWhiteCount; i++)
-        //     cout << rowWhiteNumber[i] << endl;
-        // Take sum of average to become x-coordinate of centre
-        // for(int i=0; i<rowWhiteCount; i++){
-        //     cout << rowWhiteNumber[i] << endl;
-        //     yCoordinates += rowWhiteNumber[i];
-        // }
-        // yCoordinates = int(yCoordinates / rowWhiteCount);
-
         // New Algorithm: Find width of all objects in line and ignore unreasonable width
         int temp = 1;
         for(int i=temp; i<rowWhiteCount; i++){
@@ -228,7 +225,7 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
                     yCoordinates = rowWhiteNumber[temp - 1 + int(width/2)];
 
                     // Free used objects to prevent overflow
-                    free(rowWhiteNumber);
+                    delete[] rowWhiteNumber;
                     return yCoordinates;
                 }
                 else{
@@ -237,19 +234,19 @@ int getRodCoordinates(Mat image, int **whitePoints, int pointCount){
             }
         }
         // Free used objects to prevent overflow
-        free(rowWhiteNumber);
+        delete[] rowWhiteNumber;
         return -1;
     }
     else{
-        free(rowWhiteNumber);
+        delete[] rowWhiteNumber;
         return -1;
     }
 }
 
-int getCircleCoordinates(Mat image, int **whitePoints, int pointCount, int centreX){
+int getCircleCoordinates(int imageHeight, int **whitePoints, int pointCount, int centreX){
     int listOfHeight = 0, countList = 0, centreY = 0;
     bool blackZone = false;
-    for(int i=image.cols/2; i>=0; i--){
+    for(int i=imageHeight; i>=0; i--){
         int count = 0;
         for(int j=0; j<pointCount; j++){
             // Test every points if they are inside circle, Increase count
@@ -279,9 +276,9 @@ int getCircleCoordinates(Mat image, int **whitePoints, int pointCount, int centr
         return -1;
 }
 
-int getCircleRadius(int **whitePoints, int pointCount, Point centre){
+int getCircleRadius(int **whitePoints, int pointCount, cv::Point centre){
     // Test for the maximum acceptable radius
-    int largestRadius = 0, threshold = 40;
+    int largestRadius = 0, threshold = 20;
     // 50 can be other values which is sufficiently large enough
     for(int i=0; i<50; i++){
         int count = 0;
@@ -307,22 +304,22 @@ int getCircleRadius(int **whitePoints, int pointCount, Point centre){
 }
 
 // Draw function for finding inner circle
-void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount){
+void drawBoundingArea(cv::Mat rawImage, cv::Mat rodImage, int **whitePoints, int pointCount){
     // Centre of bounding circle (x, y)
-    Point centre;
+    cv::Point centre;
 
     if (pointCount == 0) {
 		cout << "Not found" << endl;
 		return;
 	}
     
-    centre.x = getRodCoordinates(image, whitePoints, pointCount);
+    centre.x = getRodCoordinates(rodImage.rows, whitePoints, pointCount);
     if(centre.x == -1){
         cout << "Cannot locate rod" << endl;
         return;
     }
 
-    centre.y = getCircleCoordinates(image, whitePoints, pointCount, centre.x);
+    centre.y = getCircleCoordinates(rodImage.cols / 2, whitePoints, pointCount, centre.x);
     if(centre.y == -1){
         cout << "Cannot find centre" << endl;
         return;
@@ -343,44 +340,46 @@ void drawBoundingArea(Mat rawImage, Mat image, int **whitePoints, int pointCount
     pthread_mutex_unlock(&mutexLock);
 }
 
-void preFiltering(cv::Mat rawImage, int lowerColorRange){
+void preFiltering(cv::Mat rawImage, cv::Mat rodImage, int lowerColorRange){
     int *whitePoints[2], pointCount = 0;
     // whitePoints[0] = set of y-coordinates
-    whitePoints[0] = (int *)malloc(10000 * sizeof(int));
+    whitePoints[0] = new int[100000];
     // whitePoints[1] = set of x-coordinates
-    whitePoints[1] = (int *)malloc(10000 * sizeof(int));
+    whitePoints[1] = new int[100000];
     // Filter out unrelated pixels, change here if using raw 16 bits
-    for(int j=0; j<image.cols; j++){
-        for(int i=0; i<image.rows; i++){
+    for(int j=0; j<rodImage.cols; j++){
+        for(int i=0; i<rodImage.rows; i++){
             // Assume that the circle must be higher than image centre
-            if(i >= image.cols/2)
-                image.at<uchar>(i, j) = 0;
+            if(i >= rodImage.cols/2)
+                rodImage.at<uchar>(i, j) = 0;
             // Trim out leftmost and rightmost 1/8 image to reduce noise
-            else if(j <= image.rows/8)
-                image.at<uchar>(i, j) = 0;
-            else if(j >= image.rows* 7/8)
-                image.at<uchar>(i, j) = 0;
+            else if(j <= rodImage.rows/8)
+                rodImage.at<uchar>(i, j) = 0;
+            else if(j >= rodImage.rows* 7/8)
+                rodImage.at<uchar>(i, j) = 0;
             // Set all smaller than minimum colour value points to zero
-            else if(image.at<uchar>(i, j) <= lowerColorRange)
-                image.at<uchar>(i, j) = 0;
+            else if(rodImage.at<uchar>(i, j) <= lowerColorRange)
+                rodImage.at<uchar>(i, j) = 0;
             else{
                 // Set it to white and add to array for faster calculation
+                if(pointCount < 100000){
                 whitePoints[0][pointCount] = i;
                 whitePoints[1][pointCount] = j;
                 pointCount += 1;
             }
         }
     }
+    }
     // Keep processing if there is at least one point
     if(pointCount > 0)
-        drawBoundingArea(rawImage, image, whitePoints, pointCount);
-    free(whitePoints[0]);
-    free(whitePoints[1]);
+        drawBoundingArea(rawImage, rodImage, whitePoints, pointCount);
+    delete[] whitePoints[0];
+    delete[] whitePoints[1];
 }
 
 void *ballFilter(void *input){
     cv::Mat cannyEdge;
-    vector<vector<Point> > contours;
+    vector<vector<cv::Point> > contours;
     vector<Vec4i> hierarchy;
 
     // Trim out lower half of image
@@ -445,6 +444,7 @@ void *ballFilter(void *input){
 
 // Get a filtered image for finding bounding circle
 void imageFopen(char *filePath, int lowerColorRange){
+    cv::Mat rodImage;
 	rawImage = imread(filePath, 1);
 
     pthread_mutex_init(&mutexLock, NULL);
@@ -454,18 +454,20 @@ void imageFopen(char *filePath, int lowerColorRange){
 	else{
         // After opening files, convert to greyscale and pass to processing function
         // Here is only for reading image since image is stored in RGBA
-        cvtColor(rawImage, image, COLOR_BGR2GRAY);
-        image.copyTo(imageForBall);
+        cvtColor(rawImage, rodImage, COLOR_BGR2GRAY);
+        rodImage.copyTo(imageForBall);
 
         // Create thread to perform two separated tasks
         pthread_create(&ballTracking, NULL, ballFilter, NULL);
-        preFiltering(rawImage, lowerColorRange);
+        preFiltering(rawImage, rodImage, lowerColorRange);
         pthread_join(ballTracking, NULL);
+        rodImage.release();
+        imageForBall.release();
 
-        // ballFilter();
 		imshow("Test", rawImage);
 		cvWaitKey(0);
 	}
+    rawImage.release();
 }
 
 int main(int argc, char **argv){
@@ -478,6 +480,9 @@ int main(int argc, char **argv){
         imageFopen(filePath, lowerColor);
         imageNumber += 1;
         cout << "---------------------" << endl;
+        delete[] filePath;
     }
+    locationQueue->deleteAllocation();
+    delete locationQueue;
     return 0;
 }
