@@ -30,14 +30,17 @@ For C++ codes, this project can be compiled on Windows 10 or Mac OS or Ubuntu 16
 
 * Process with given images or videos
 
+* Locate throwing balls
+
 ### Bug
 
 * Few errors when not stable moving in live video (Will be fixed in kinect detection project, use array to store sequences and check)
+
 * Recognize longer fence
 
 ### Not finished
 
-* Locate throwing balls (Probably needs signal)
+* Goal Detection
 
 ## Usage
 
