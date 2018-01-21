@@ -33,8 +33,9 @@ typedef struct {
     int z1;
     cv::Point point2;
     int z2;
-    cv::Point2f intercept;
-    int z_interpolation;
+    cv::Point2d intersect;
+    double twoPointDistance;
+    double z_interpolation;
 } intersectionPoint;
 
 // Directories name which are stored images
@@ -406,11 +407,13 @@ void preFiltering(cv::Mat rawImage, cv::Mat rodImage, int lowerColorRange){
 }
 
 void goalDetection(){
-    bool result = true, intersection = false;
+    bool result = false, intersection = false;
     double threshold = 0.1;
+    int pointCount = 0;
+    intersectionPoint *pointsOnLine = new intersectionPoint[3];
     for(int i=1; i<recordedPos; i++){
         // The ball should fly with increasing z-distance
-        cout << ballPath[i].zDistance << endl;
+        // cout << ballPath[i].zDistance << endl;
         if(ballPath[i].zDistance - ballPath[i - 1].zDistance < 0)
             result = false;
 
@@ -426,15 +429,16 @@ void goalDetection(){
         delta = pow(bCoefficient, 2) - 4.0 * aCoefficient * cCoefficient;
         if(delta >= 0){
             cv::Point2d intersect1, intersect2;
+            // Retrieve two intersection points
             intersect1.x = (-1 * bCoefficient + sqrt(delta)) / (2.0 * aCoefficient);
             intersect1.y = lineSlope * intersect1.x + lineIntercept;
             intersect2.x = (-1 * bCoefficient - sqrt(delta)) / (2.0 * aCoefficient);
             intersect2.y = lineSlope * intersect2.x + lineIntercept;
 
-            // Check the solutions are within line segments or not
             double twoPointDistance, intersect1DistanceSum, intersect2DistanceSum;
-            // If distance of new point with two points is larger than distance of two points
+            // Check the solutions are within line segments or not
             twoPointDistance = sqrt(pow(ballPath[i].ballCentre.x - ballPath[i - 1].ballCentre.x, 2) + pow(ballPath[i].ballCentre.y - ballPath[i - 1].ballCentre.y, 2));
+            // If distance of new point with two points is larger than distance of two points
             intersect1DistanceSum = sqrt(pow(intersect1.x - ballPath[i].ballCentre.x, 2) + pow(intersect1.y - ballPath[i].ballCentre.y, 2))
                                   + sqrt(pow(intersect1.x - ballPath[i - 1].ballCentre.x, 2) + pow(intersect1.y - ballPath[i - 1].ballCentre.y, 2));
             intersect2DistanceSum = sqrt(pow(intersect2.x - ballPath[i].ballCentre.x, 2) + pow(intersect2.y - ballPath[i].ballCentre.y, 2))
@@ -442,15 +446,45 @@ void goalDetection(){
             
             // Return only points lied within line segments
             if(fabs(intersect1DistanceSum - twoPointDistance) < threshold){
-                cv::line(rawImage, cv::Point(intersect1.x - 5, intersect1.y), cv::Point(intersect1.x + 5, intersect1.y), Scalar(255, 255, 0), 2);
-                cv::line(rawImage, cv::Point(intersect1.x, intersect1.y - 5), cv::Point(intersect1.x, intersect1.y + 5), Scalar(255, 255, 0), 2);
+                // cv::line(rawImage, cv::Point(intersect1.x - 5, intersect1.y), cv::Point(intersect1.x + 5, intersect1.y), Scalar(255, 255, 0), 2);
+                // cv::line(rawImage, cv::Point(intersect1.x, intersect1.y - 5), cv::Point(intersect1.x, intersect1.y + 5), Scalar(255, 255, 0), 2);
+                pointsOnLine[pointCount].point1 = ballPath[i - 1].ballCentre;
+                pointsOnLine[pointCount].z1 = ballPath[i - 1].zDistance;
+                pointsOnLine[pointCount].point2 = ballPath[i].ballCentre;
+                pointsOnLine[pointCount].z2 = ballPath[i].zDistance;
+                pointsOnLine[pointCount].intersect = intersect1;
+                pointsOnLine[pointCount].twoPointDistance = twoPointDistance;
+                pointCount += 1;
             }
             else if(fabs(intersect2DistanceSum - twoPointDistance) < threshold){
-                cv::line(rawImage, cv::Point(intersect2.x - 5, intersect2.y), cv::Point(intersect2.x + 5, intersect2.y), Scalar(255, 255, 0), 2);
-                cv::line(rawImage, cv::Point(intersect2.x, intersect2.y - 5), cv::Point(intersect2.x, intersect2.y + 5), Scalar(255, 255, 0), 2);
+                // cv::line(rawImage, cv::Point(intersect2.x - 5, intersect2.y), cv::Point(intersect2.x + 5, intersect2.y), Scalar(255, 255, 0), 2);
+                // cv::line(rawImage, cv::Point(intersect2.x, intersect2.y - 5), cv::Point(intersect2.x, intersect2.y + 5), Scalar(255, 255, 0), 2);
+                pointsOnLine[pointCount].point1 = ballPath[i - 1].ballCentre;
+                pointsOnLine[pointCount].z1 = ballPath[i - 1].zDistance;
+                pointsOnLine[pointCount].point2 = ballPath[i].ballCentre;
+                pointsOnLine[pointCount].z2 = ballPath[i].zDistance;
+                pointsOnLine[pointCount].intersect = intersect2;
+                pointsOnLine[pointCount].twoPointDistance = twoPointDistance;
+                pointCount += 1;
             }
         }
 
+    }
+
+    if(pointCount < 2)
+        result = false;
+    else{
+        // Interpolate all points lied on line
+        for(int i=0; i<pointCount; i++){
+            int zDiff = pointsOnLine[i].z1 - pointsOnLine[i].z2;
+            double distanceWithPoint1 = sqrt(pow(pointsOnLine[i].point1.x - pointsOnLine[i].intersect.x, 2) + pow(pointsOnLine[i].point1.y - pointsOnLine[i].intersect.y, 2));
+            pointsOnLine[i].z_interpolation = pointsOnLine[i].z1 - zDiff * distanceWithPoint1 / pointsOnLine[i].twoPointDistance;
+            cout << pointsOnLine[i].z_interpolation << endl;
+        }
+        // z-value: pointsOnLine[0].z_interpolation < zPos < pointsOnLine[1].z_interpolation
+        cout << "Rod Position: " << zPos << endl;
+        if(pointsOnLine[0].z_interpolation < zPos && zPos < pointsOnLine[1].z_interpolation)
+            result = true;
     }
 
     // Put text on displayed image
@@ -458,6 +492,7 @@ void goalDetection(){
         putText(rawImage, string("Goal"), Point(430, 30), 0, 1, Scalar(0, 127, 255), 2);
     else if(result == false && recordedPos > 0)
         putText(rawImage, string("Fail"), Point(430, 30), 0, 1, Scalar(0, 127, 255), 2);
+    delete[] pointsOnLine;
 }
 
 void *ballFilter(void *input){
