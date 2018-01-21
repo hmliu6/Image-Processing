@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <string>
+#define IMAGE_FORMAT uchar
 
 #if defined(__WIN32__) || defined(__WIN64__)
    const char pathSlash = '\\';
@@ -50,7 +51,7 @@ const int cannyLower = 10;
 const int cannyUpper = 150;
 
 // Global results of Goal and Ball tracing
-int detectedBall = 0, recordedPos = 0;
+int detectedBall = 0, recordedPos = 0, zPos = -1;
 ballInfo ballPath[20];
 circleInfo outputCircle;
 
@@ -341,6 +342,18 @@ void drawBoundingArea(cv::Mat rawImage, cv::Mat rodImage, int **whitePoints, int
     pthread_mutex_lock(&mutexLock);
 	circle(rawImage, outputCircle.centre, outputCircle.maxRadius, CV_RGB(255, 255, 255), 2);
     pthread_mutex_unlock(&mutexLock);
+
+    // Locate z-Position for goal circle
+    for(int j=0; j<pointCount; j++){
+        // Test every points if they are on circle
+        int dY = pow((whitePoints[0][j] - outputCircle.centre.y), 2);
+        int dX = pow((whitePoints[1][j] - outputCircle.centre.x), 2);
+        if(dX + dY == pow(outputCircle.maxRadius, 2)){
+            int tempPosition = int(rodImage.at<IMAGE_FORMAT>(whitePoints[0][j], whitePoints[1][j]));
+            if(tempPosition > zPos)
+                zPos = tempPosition;
+        }
+    }
 }
 
 void preFiltering(cv::Mat rawImage, cv::Mat rodImage, int lowerColorRange){
@@ -357,15 +370,15 @@ void preFiltering(cv::Mat rawImage, cv::Mat rodImage, int lowerColorRange){
         for(int i=0; i<rodImage.rows; i++){
             // Assume that the circle must be higher than image centre
             if(i >= rodImage.cols/2)
-                rodImage.at<uchar>(i, j) = 0;
+                rodImage.at<IMAGE_FORMAT>(i, j) = 0;
             // Trim out leftmost and rightmost 1/8 image to reduce noise
             else if(j <= rodImage.rows/8)
-                rodImage.at<uchar>(i, j) = 0;
+                rodImage.at<IMAGE_FORMAT>(i, j) = 0;
             else if(j >= rodImage.rows* 7/8)
-                rodImage.at<uchar>(i, j) = 0;
+                rodImage.at<IMAGE_FORMAT>(i, j) = 0;
             // Set all smaller than minimum colour value points to zero
-            else if(rodImage.at<uchar>(i, j) <= lowerColorRange)
-                rodImage.at<uchar>(i, j) = 0;
+            else if(rodImage.at<IMAGE_FORMAT>(i, j) <= lowerColorRange)
+                rodImage.at<IMAGE_FORMAT>(i, j) = 0;
             else{
                 // Set it to white and add to array for faster calculation
                 if(pointCount < 100000){
@@ -393,7 +406,7 @@ void *ballFilter(void *input){
         for(int i=0; i<imageForBall.rows; i++){
             // Assume that the ball must be higher than image centre, change here if using raw 16 bits
             if(i >= imageForBall.rows/2)
-                imageForBall.at<uchar>(i, j) = 0;
+                imageForBall.at<IMAGE_FORMAT>(i, j) = 0;
         }
     }
 
@@ -425,8 +438,7 @@ void *ballFilter(void *input){
 
         // Record current first point to vector array
         ballPath[recordedPos].ballCentre = massCentre[0];
-        ballPath[recordedPos].zDistance = imageForBall.at<uchar>(massCentre[0].y, massCentre[0].x);
-        cout << ballPath[recordedPos].zDistance << endl;
+        ballPath[recordedPos].zDistance = imageForBall.at<IMAGE_FORMAT>(massCentre[0].y, massCentre[0].x);
         recordedPos += 1;
         detectedBall = 1;
     }
@@ -470,6 +482,7 @@ void imageFopen(char *filePath, int lowerColorRange){
         rodImage.release();
         imageForBall.release();
 
+        zPos = -1;
 		imshow("Test", rawImage);
 		cvWaitKey(0);
 	}
