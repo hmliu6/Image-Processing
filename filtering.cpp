@@ -28,6 +28,15 @@ typedef struct {
     int zDistance;
 } ballInfo;
 
+typedef struct {
+    cv::Point point1;
+    int z1;
+    cv::Point point2;
+    int z2;
+    cv::Point2f intercept;
+    int z_interpolation;
+} intersectionPoint;
+
 // Directories name which are stored images
 const char* highestRodDir = "highestRod";
 const char* sampleImageDir = "sampleImage";
@@ -396,6 +405,61 @@ void preFiltering(cv::Mat rawImage, cv::Mat rodImage, int lowerColorRange){
     delete[] whitePoints[1];
 }
 
+void goalDetection(){
+    bool result = true, intersection = false;
+    double threshold = 0.1;
+    for(int i=1; i<recordedPos; i++){
+        // The ball should fly with increasing z-distance
+        cout << ballPath[i].zDistance << endl;
+        if(ballPath[i].zDistance - ballPath[i - 1].zDistance < 0)
+            result = false;
+
+        // At least one point intersection between circle and path only considering xy-plane
+        // Here Point(x, y) is correct
+        double lineSlope, lineIntercept, aCoefficient, bCoefficient, cCoefficient, delta;
+        lineSlope = (ballPath[i].ballCentre.y - ballPath[i - 1].ballCentre.y) / (ballPath[i].ballCentre.x - ballPath[i - 1].ballCentre.x);
+        lineIntercept = -1 * lineSlope * ballPath[i - 1].ballCentre.x + ballPath[i - 1].ballCentre.y;
+        aCoefficient = 1 + pow(lineSlope, 2);
+        bCoefficient = 2.0 * lineSlope * (lineIntercept - outputCircle.centre.y) - 2.0 * outputCircle.centre.x;
+        cCoefficient = pow(outputCircle.centre.x, 2) + pow(lineIntercept - outputCircle.centre.y, 2) - pow(outputCircle.maxRadius, 2);
+
+        delta = pow(bCoefficient, 2) - 4.0 * aCoefficient * cCoefficient;
+        if(delta >= 0){
+            cv::Point2d intersect1, intersect2;
+            intersect1.x = (-1 * bCoefficient + sqrt(delta)) / (2.0 * aCoefficient);
+            intersect1.y = lineSlope * intersect1.x + lineIntercept;
+            intersect2.x = (-1 * bCoefficient - sqrt(delta)) / (2.0 * aCoefficient);
+            intersect2.y = lineSlope * intersect2.x + lineIntercept;
+
+            // Check the solutions are within line segments or not
+            double twoPointDistance, intersect1DistanceSum, intersect2DistanceSum;
+            // If distance of new point with two points is larger than distance of two points
+            twoPointDistance = sqrt(pow(ballPath[i].ballCentre.x - ballPath[i - 1].ballCentre.x, 2) + pow(ballPath[i].ballCentre.y - ballPath[i - 1].ballCentre.y, 2));
+            intersect1DistanceSum = sqrt(pow(intersect1.x - ballPath[i].ballCentre.x, 2) + pow(intersect1.y - ballPath[i].ballCentre.y, 2))
+                                  + sqrt(pow(intersect1.x - ballPath[i - 1].ballCentre.x, 2) + pow(intersect1.y - ballPath[i - 1].ballCentre.y, 2));
+            intersect2DistanceSum = sqrt(pow(intersect2.x - ballPath[i].ballCentre.x, 2) + pow(intersect2.y - ballPath[i].ballCentre.y, 2))
+                                  + sqrt(pow(intersect2.x - ballPath[i - 1].ballCentre.x, 2) + pow(intersect2.y - ballPath[i - 1].ballCentre.y, 2));
+            
+            // Return only points lied within line segments
+            if(fabs(intersect1DistanceSum - twoPointDistance) < threshold){
+                cv::line(rawImage, cv::Point(intersect1.x - 5, intersect1.y), cv::Point(intersect1.x + 5, intersect1.y), Scalar(255, 255, 0), 2);
+                cv::line(rawImage, cv::Point(intersect1.x, intersect1.y - 5), cv::Point(intersect1.x, intersect1.y + 5), Scalar(255, 255, 0), 2);
+            }
+            else if(fabs(intersect2DistanceSum - twoPointDistance) < threshold){
+                cv::line(rawImage, cv::Point(intersect2.x - 5, intersect2.y), cv::Point(intersect2.x + 5, intersect2.y), Scalar(255, 255, 0), 2);
+                cv::line(rawImage, cv::Point(intersect2.x, intersect2.y - 5), cv::Point(intersect2.x, intersect2.y + 5), Scalar(255, 255, 0), 2);
+            }
+        }
+
+    }
+
+    // Put text on displayed image
+    if(result == true && recordedPos > 0)
+        putText(rawImage, string("Goal"), Point(430, 30), 0, 1, Scalar(0, 127, 255), 2);
+    else if(result == false && recordedPos > 0)
+        putText(rawImage, string("Fail"), Point(430, 30), 0, 1, Scalar(0, 127, 255), 2);
+}
+
 void *ballFilter(void *input){
     cv::Mat cannyEdge;
     vector<vector<cv::Point> > contours;
@@ -438,7 +502,7 @@ void *ballFilter(void *input){
 
         // Record current first point to vector array
         ballPath[recordedPos].ballCentre = massCentre[0];
-        ballPath[recordedPos].zDistance = imageForBall.at<IMAGE_FORMAT>(massCentre[0].y, massCentre[0].x);
+        ballPath[recordedPos].zDistance = int(imageForBall.at<IMAGE_FORMAT>(massCentre[0].y, massCentre[0].x));
         recordedPos += 1;
         detectedBall = 1;
     }
@@ -446,8 +510,8 @@ void *ballFilter(void *input){
         detectedBall -= 1;
     }
 
-    // Reset vector array if cannot detect ball in consecutive 4 frames
-    if(detectedBall == -3){
+    // Reset vector array if cannot detect ball in consecutive 5 frames
+    if(detectedBall == -4){
         recordedPos = 0;
     }
 
@@ -482,6 +546,9 @@ void imageFopen(char *filePath, int lowerColorRange){
         rodImage.release();
         imageForBall.release();
 
+        if(detectedBall == -3 && recordedPos > 0)
+            goalDetection();
+
         zPos = -1;
 		imshow("Test", rawImage);
 		cvWaitKey(0);
@@ -493,7 +560,7 @@ int main(int argc, char **argv){
     int lowerColor;
     colorCalculation(&lowerColor);
     imageNumber = 1;
-    for(int i=0; i<70; i++){
+    for(int i=0; i<77; i++){
         char* filePath = pathParser(imageDir);
         cout << filePath << endl;
         imageFopen(filePath, lowerColor);
