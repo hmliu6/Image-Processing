@@ -48,8 +48,11 @@ int imageNumber = 1;
 const int medianBlurValue = 5;
 const int cannyLower = 10;
 const int cannyUpper = 150;
-int detectedBall = 0, detectedIndex = 0;
+
+// Global results of Goal and Ball tracing
+int detectedBall = 0, recordedPos = 0;
 ballInfo ballPath[20];
+circleInfo outputCircle;
 
 pthread_t ballTracking;
 pthread_mutex_t mutexLock = PTHREAD_MUTEX_INITIALIZER;
@@ -332,7 +335,7 @@ void drawBoundingArea(cv::Mat rawImage, cv::Mat rodImage, int **whitePoints, int
 	}
     
     locationQueue->enqueue(centre, largestRadius);
-	circleInfo outputCircle = locationQueue->medianDistance();
+	outputCircle = locationQueue->medianDistance();
 
 	// Draw circle in raw image instead of processed image
     pthread_mutex_lock(&mutexLock);
@@ -342,6 +345,9 @@ void drawBoundingArea(cv::Mat rawImage, cv::Mat rodImage, int **whitePoints, int
 
 void preFiltering(cv::Mat rawImage, cv::Mat rodImage, int lowerColorRange){
     int *whitePoints[2], pointCount = 0;
+    // Reset to -1 since it will be updated each frame
+    outputCircle.centre = cv::Point(-1, -1);
+    outputCircle.maxRadius = -1;
     // whitePoints[0] = set of y-coordinates
     whitePoints[0] = new int[100000];
     // whitePoints[1] = set of x-coordinates
@@ -418,10 +424,10 @@ void *ballFilter(void *input){
         // cv::line(rawImage, cv::Point(massCentre[0].x, massCentre[0].y - 5), cv::Point(massCentre[0].x, massCentre[0].y + 5), Scalar(255, 255, 0), 2);
 
         // Record current first point to vector array
-        ballPath[detectedIndex].ballCentre = massCentre[0];
-        ballPath[detectedIndex].zDistance = imageForBall.at<uchar>(massCentre[0].y, massCentre[0].x);
-        cout << ballPath[detectedIndex].zDistance << endl;
-        detectedIndex += 1;
+        ballPath[recordedPos].ballCentre = massCentre[0];
+        ballPath[recordedPos].zDistance = imageForBall.at<uchar>(massCentre[0].y, massCentre[0].x);
+        cout << ballPath[recordedPos].zDistance << endl;
+        recordedPos += 1;
         detectedBall = 1;
     }
     else{
@@ -430,12 +436,12 @@ void *ballFilter(void *input){
 
     // Reset vector array if cannot detect ball in consecutive 4 frames
     if(detectedBall == -3){
-        detectedIndex = 0;
+        recordedPos = 0;
     }
 
     // Draw trace line with mutex lock to achieve mutually exclusive
     pthread_mutex_lock(&mutexLock);
-    for(int i=1; i<detectedIndex; i++)
+    for(int i=1; i<recordedPos; i++)
         cv::line(rawImage, ballPath[i-1].ballCentre, ballPath[i].ballCentre, Scalar(0, 255, 255), 2);
     pthread_mutex_unlock(&mutexLock);
 
