@@ -64,6 +64,7 @@ const int cannyUpper = 150;
 int detectedBall = 0, recordedPos = 0, zPos = -1;
 ballInfo ballPath[20];
 circleInfo outputCircle;
+bool circleExist = false;
 
 pthread_t ballTracking;
 pthread_mutex_t mutexLock = PTHREAD_MUTEX_INITIALIZER;
@@ -349,19 +350,22 @@ void drawBoundingArea(cv::Mat rawImage, cv::Mat rodImage, int **whitePoints, int
 	outputCircle = locationQueue->medianDistance();
 
 	// Draw circle in raw image instead of processed image
-    pthread_mutex_lock(&mutexLock);
-	circle(rawImage, outputCircle.centre, outputCircle.maxRadius, CV_RGB(255, 255, 255), 2);
-    pthread_mutex_unlock(&mutexLock);
+    if(outputCircle.centre.x > 0 && outputCircle.centre.y > 0 && outputCircle.maxRadius > 0){
+        circleExist = true;
+        pthread_mutex_lock(&mutexLock);
+        circle(rawImage, outputCircle.centre, outputCircle.maxRadius, CV_RGB(255, 255, 255), 2);
+        pthread_mutex_unlock(&mutexLock);
 
-    // Locate z-Position for goal circle
-    for(int j=0; j<pointCount; j++){
-        // Test every points if they are on circle
-        int dY = pow((whitePoints[0][j] - outputCircle.centre.y), 2);
-        int dX = pow((whitePoints[1][j] - outputCircle.centre.x), 2);
-        if(dX + dY == pow(outputCircle.maxRadius, 2)){
-            int tempPosition = int(rodImage.at<IMAGE_FORMAT>(whitePoints[0][j], whitePoints[1][j]));
-            if(tempPosition > zPos)
-                zPos = tempPosition;
+        // Locate z-Position for goal circle
+        for(int j=0; j<pointCount; j++){
+            // Test every points if they are on circle
+            int dY = pow((whitePoints[0][j] - outputCircle.centre.y), 2);
+            int dX = pow((whitePoints[1][j] - outputCircle.centre.x), 2);
+            if(dX + dY == pow(outputCircle.maxRadius, 2)){
+                int tempPosition = int(rodImage.at<IMAGE_FORMAT>(whitePoints[0][j], whitePoints[1][j]));
+                if(tempPosition > zPos)
+                    zPos = tempPosition;
+            }
         }
     }
 }
@@ -559,6 +563,23 @@ void *ballFilter(void *input){
     pthread_exit(NULL);
 }
 
+void imageProcessing(cv::Mat rodImage, int lowerColorRange){
+    rodImage.copyTo(imageForBall);
+
+    // Create thread to perform two separated tasks
+    circleExist = false;
+    pthread_create(&ballTracking, NULL, ballFilter, NULL);
+    preFiltering(rawImage, rodImage, lowerColorRange);
+    pthread_join(ballTracking, NULL);
+    rodImage.release();
+    imageForBall.release();
+
+    if(detectedBall == -3 && recordedPos > 0)
+        goalDetection();
+
+    zPos = -1;
+}
+
 // Get a filtered image for finding bounding circle
 void imageFopen(char *filePath, int lowerColorRange){
     cv::Mat rodImage;
@@ -572,19 +593,7 @@ void imageFopen(char *filePath, int lowerColorRange){
         // After opening files, convert to greyscale and pass to processing function
         // Here is only for reading image since image is stored in RGBA
         cvtColor(rawImage, rodImage, COLOR_BGR2GRAY);
-        rodImage.copyTo(imageForBall);
-
-        // Create thread to perform two separated tasks
-        pthread_create(&ballTracking, NULL, ballFilter, NULL);
-        preFiltering(rawImage, rodImage, lowerColorRange);
-        pthread_join(ballTracking, NULL);
-        rodImage.release();
-        imageForBall.release();
-
-        if(detectedBall == -3 && recordedPos > 0)
-            goalDetection();
-
-        zPos = -1;
+        imageProcessing(rodImage, lowerColorRange);
 		imshow("Test", rawImage);
 		cvWaitKey(0);
 	}
