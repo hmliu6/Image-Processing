@@ -62,7 +62,7 @@ const int cannyUpper = 150;
 
 // Global results of Goal and Ball tracing
 int detectedBall = 0, recordedPos = 0, zPos = -1;
-ballInfo ballPath[20];
+ballInfo *ballPath = new ballInfo[20];
 circleInfo outputCircle;
 bool circleExist = false;
 
@@ -500,7 +500,7 @@ void goalDetection(){
 }
 
 void *ballFilter(void *input){
-    cv::Mat cannyEdge;
+    cv::Mat cannyEdge, temp;
     vector<vector<cv::Point> > contours;
     vector<Vec4i> hierarchy;
 
@@ -514,8 +514,8 @@ void *ballFilter(void *input){
     }
 
     // Function(sourceImage, destImage, params);
-    medianBlur(imageForBall, imageForBall, 2 * medianBlurValue + 1);
-    Canny(imageForBall, cannyEdge, cannyLower, cannyUpper);
+    medianBlur(imageForBall, temp, 2 * medianBlurValue + 1);
+    Canny(temp, cannyEdge, cannyLower, cannyUpper);
     findContours(cannyEdge, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
 
     // Draw all contours with filled colour
@@ -531,17 +531,23 @@ void *ballFilter(void *input){
 
         // Get mass centre of contours
         vector<Point2f> massCentre(contours.size());
-        for(int i = 0; i < contours.size(); i++)
-            massCentre[i] = Point2f(moment[i].m10/moment[i].m00 , moment[i].m01/moment[i].m00);
-        
+        int massCentreCounter = 0;
+        for(int i = 0; i < contours.size(); i++){
+            if(moment[i].m00 > 0){
+                massCentre[massCentreCounter] = Point2f(moment[i].m10/moment[i].m00, moment[i].m01/moment[i].m00);
+                massCentreCounter += 1;
+            }
+        }
         // Draw centre on image
         // cout << "{ " << massCentre[0].x << ", " << massCentre[0].y << " }" << endl;
         // cv::line(rawImage, cv::Point(massCentre[0].x - 5, massCentre[0].y), cv::Point(massCentre[0].x + 5, massCentre[0].y), Scalar(255, 255, 0), 2);
         // cv::line(rawImage, cv::Point(massCentre[0].x, massCentre[0].y - 5), cv::Point(massCentre[0].x, massCentre[0].y + 5), Scalar(255, 255, 0), 2);
 
         // Record current first point to vector array
-        ballPath[recordedPos].ballCentre = massCentre[0];
-        ballPath[recordedPos].zDistance = int(imageForBall.at<IMAGE_FORMAT>(massCentre[0].y, massCentre[0].x));
+        ballPath[recordedPos].ballCentre = cv::Point(massCentre[0]);
+        ballPath[recordedPos].zDistance = int(imageForBall.at<IMAGE_FORMAT>(int(massCentre[0].y), int(massCentre[0].x)));
+        cout << "zDistance : " << (int)imageForBall.at<IMAGE_FORMAT>(int(massCentre[0].y), int(massCentre[0].x)) << endl;
+
         recordedPos += 1;
         detectedBall = 1;
     }
@@ -571,8 +577,6 @@ void imageProcessing(cv::Mat rodImage, int lowerColorRange){
     pthread_create(&ballTracking, NULL, ballFilter, NULL);
     preFiltering(rawImage, rodImage, lowerColorRange);
     pthread_join(ballTracking, NULL);
-    rodImage.release();
-    imageForBall.release();
 
     if(detectedBall == -3 && recordedPos > 0)
         goalDetection();
@@ -598,6 +602,8 @@ void imageFopen(char *filePath, int lowerColorRange){
 		cvWaitKey(0);
 	}
     rawImage.release();
+    imageForBall.release();
+    rodImage.release();
 }
 
 int main(int argc, char **argv){
