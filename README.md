@@ -17,6 +17,10 @@ For C++ codes, this project can be compiled on Windows 10 or Mac OS or Ubuntu 16
 
 2. RUN `brew install opencv` in your local machine
 
+### Nvidia Jetson TX2
+
+Reference: ![https://jkjung-avt.github.io/opencv3-on-tx2/](https://jkjung-avt.github.io/opencv3-on-tx2/)
+
 ## Stage
 
 ### Finished
