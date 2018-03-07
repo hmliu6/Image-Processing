@@ -19,7 +19,8 @@ For C++ codes, this project can be compiled on Windows 10 or Mac OS or Ubuntu 16
 
 ### Nvidia Jetson TX2
 
-Reference: ![https://jkjung-avt.github.io/opencv3-on-tx2/](https://jkjung-avt.github.io/opencv3-on-tx2/)
+OpenCV: ![https://jkjung-avt.github.io/opencv3-on-tx2/](https://jkjung-avt.github.io/opencv3-on-tx2/)
+libfreenect2: ![http://fugjo16.blogspot.hk/2017/08/jetson-tx2-ros-kinect2.html](http://fugjo16.blogspot.hk/2017/08/jetson-tx2-ros-kinect2.html)
 
 ## Stage
 
